@@ -1,0 +1,1684 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>后室·无尽回廊</title><style>/* ============================================================
+   后室·无尽回廊 —— 退化的监控终端 (Degrading CRT terminal)
+   核心：整块屏幕随隐藏理智(sanity)腐坏。calm→unease→dread→broken
+   ============================================================ */
+
+/* 每层理智的调色与腐坏强度（由 body.tier-* 切换） */
+:root{
+  --bg:#0a0a07; --ink:#e9c573; --dim:#8a7838; --accent:#f3d99a; --danger:#d98c8c;
+  --scan:0.10;      /* 扫描线强度 */
+  --vig:0.55;       /* 暗角强度 */
+  --aberr:0px;      /* 色散位移 */
+  --glow:6px;       /* 磷光辉光 */
+  --flickdur:7s;    /* 闪烁周期 */
+  --grain:0.04;     /* 噪点强度 */
+}
+body.tier-calm  { --ink:#e9c573; --dim:#8a7838; --scan:0.10; --vig:0.55; --aberr:0px;   --glow:6px;  --flickdur:7s;  --grain:0.04; }
+body.tier-unease{ --ink:#ddc869; --dim:#867b34; --scan:0.15; --vig:0.64; --aberr:0.4px; --glow:7px;  --flickdur:5.5s;--grain:0.06; }
+body.tier-dread { --bg:#0c0b05; --ink:#cdbb52; --dim:#7e7128; --accent:#e6d27a; --scan:0.22; --vig:0.74; --aberr:0.9px; --glow:9px; --flickdur:3.8s; --grain:0.09; }
+body.tier-broken{ --bg:#0b0c05; --ink:#b7b441; --dim:#6f7220; --accent:#d7d65f; --danger:#e2a0a0; --scan:0.30; --vig:0.86; --aberr:1.8px; --glow:12px; --flickdur:2.4s; --grain:0.13; }
+
+*{ box-sizing:border-box; }
+html,body{ height:100%; }
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:"Cascadia Mono","Sarasa Mono SC",Consolas,"Courier New","Noto Sans Mono CJK SC",monospace;
+  line-height:1.75; letter-spacing:.01em;
+  transition:background .9s ease, color .9s ease;
+  overflow-x:hidden;
+}
+
+/* ---------- CRT 叠层：噪点 + 扫描线 + 闪烁 ---------- */
+#crt{
+  position:fixed; inset:0; z-index:50; pointer-events:none;
+  background:
+    /* 细扫描线 */
+    repeating-linear-gradient(0deg, rgba(0,0,0,calc(var(--scan)*1.0)) 0px, rgba(0,0,0,calc(var(--scan)*1.0)) 1px, transparent 1px, transparent 3px),
+    /* 粗滚动条 */
+    linear-gradient(rgba(255,255,255,.02), rgba(255,255,255,0) 12%);
+  background-size:100% 3px, 100% 100%;
+  mix-blend-mode:overlay;
+  animation:flick var(--flickdur) steps(60) infinite, roll 9s linear infinite;
+}
+/* 噪点：内联 SVG fractalNoise */
+#grain{
+  position:fixed; inset:-50%; z-index:51; pointer-events:none; opacity:var(--grain);
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  animation:grainshift .4s steps(4) infinite;
+}
+/* 暗角 */
+#vignette{
+  position:fixed; inset:0; z-index:49; pointer-events:none;
+  background:radial-gradient(ellipse at center, transparent 38%, rgba(0,0,0,var(--vig)) 100%);
+  transition:background .9s ease;
+}
+@keyframes flick{ 0%,96%{opacity:1} 97%{opacity:.74} 97.5%{opacity:1} 98.6%{opacity:.85} 100%{opacity:1} }
+@keyframes roll{ from{background-position:0 0, 0 0} to{background-position:0 100%, 0 0} }
+@keyframes grainshift{ 0%{transform:translate(0,0)} 25%{transform:translate(-3%,2%)} 50%{transform:translate(2%,-3%)} 75%{transform:translate(-2%,-1%)} 100%{transform:translate(1%,2%)} }
+
+/* 关闭开关 */
+body.noscan #crt{ display:none; }
+body.nograin #grain{ display:none; }
+body.noflicker #crt{ animation:roll 9s linear infinite; }
+
+/* ---------- 布局 ---------- */
+#app{ position:relative; z-index:2; max-width:720px; margin:0 auto; padding:40px 28px 64px; min-height:100vh; }
+body.bigfont #app{ font-size:118%; }
+
+/* 顶部信号牌 */
+#status{
+  position:sticky; top:0; z-index:6; backdrop-filter:blur(1px);
+  display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  padding:10px 0 12px; margin-bottom:6px; font-size:13.5px; color:var(--dim);
+  border-bottom:1px solid color-mix(in srgb, var(--dim) 55%, transparent);
+}
+#status .plate{
+  color:var(--bg); background:var(--ink); padding:2px 10px; font-weight:700; letter-spacing:.06em;
+  box-shadow:0 0 calc(var(--glow)*1.2) color-mix(in srgb, var(--ink) 60%, transparent);
+}
+#status .sep{ opacity:.4; }
+#status .hint{ font-style:italic; color:color-mix(in srgb, var(--ink) 70%, var(--dim)); margin-left:auto; }
+
+/* 正文 */
+#text{
+  white-space:pre-wrap; margin:30px 0 26px; font-size:17.5px; min-height:130px;
+  color:var(--ink); text-shadow:0 0 var(--glow) color-mix(in srgb, var(--ink) 35%, transparent);
+}
+#text.reveal{ animation:textin .55s ease both; }
+@keyframes textin{ from{opacity:0; transform:translateY(8px); filter:blur(2px)} to{opacity:1; transform:none; filter:none} }
+/* 低理智：色散 + 抖动 */
+body.tier-dread #text, body.tier-broken #text{
+  text-shadow:
+    calc(var(--aberr)*-1) 0 color-mix(in srgb, #ff3b3b 70%, transparent),
+    var(--aberr) 0 color-mix(in srgb, #34e0ff 70%, transparent),
+    0 0 var(--glow) color-mix(in srgb, var(--ink) 40%, transparent);
+}
+body.tier-broken #text{ animation:textin .55s ease both, jitter 2.6s steps(8) infinite .55s; }
+@keyframes jitter{ 0%,100%{transform:translate(0,0)} 20%{transform:translate(.6px,-.4px)} 40%{transform:translate(-.5px,.3px)} 60%{transform:translate(.3px,.5px)} 80%{transform:translate(-.4px,-.3px)} }
+
+/* 选项 */
+#choices{ display:flex; flex-direction:column; gap:9px; }
+.choice{
+  position:relative; display:flex; align-items:baseline; gap:10px; width:100%; text-align:left;
+  background:linear-gradient(90deg, color-mix(in srgb, var(--ink) 5%, transparent), transparent 60%);
+  color:var(--ink); border:1px solid color-mix(in srgb, var(--dim) 70%, transparent);
+  padding:11px 14px 11px 16px; font:inherit; font-size:15.5px; cursor:pointer;
+  opacity:0; animation:choicein .45s ease forwards; transition:background .14s, border-color .14s, transform .12s, box-shadow .14s;
+}
+@keyframes choicein{ from{opacity:0; transform:translateX(-10px)} to{opacity:1; transform:none} }
+.choice::before{ content:""; position:absolute; left:0; top:0; bottom:0; width:0; background:var(--ink); transition:width .14s ease; }
+.choice:hover, .choice:focus-visible{
+  background:linear-gradient(90deg, color-mix(in srgb, var(--ink) 14%, transparent), transparent 70%);
+  border-color:var(--ink); outline:none; transform:translateX(2px);
+  box-shadow:0 0 calc(var(--glow)*1.6) color-mix(in srgb, var(--ink) 22%, transparent);
+}
+.choice:hover::before, .choice:focus-visible::before{ width:3px; }
+.choice .key{ flex:0 0 auto; font-size:12px; color:var(--bg); background:color-mix(in srgb, var(--ink) 85%, transparent); padding:1px 6px; min-width:20px; text-align:center; }
+.choice .lbl{ flex:1 1 auto; }
+
+/* 底部工具条 */
+#bar{
+  margin-top:30px; padding-top:14px; font-size:12.5px; color:var(--dim);
+  border-top:1px solid color-mix(in srgb, var(--dim) 45%, transparent);
+  display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+}
+#bar button{ background:transparent; color:var(--dim); border:1px solid color-mix(in srgb, var(--dim) 60%, transparent); padding:4px 10px; font:inherit; font-size:12px; cursor:pointer; transition:.14s; }
+#bar button:hover{ color:var(--ink); border-color:var(--ink); }
+#bar .inv{ margin-left:auto; color:color-mix(in srgb, var(--ink) 60%, var(--dim)); }
+#bar .inv b{ color:var(--ink); font-weight:600; }
+
+/* 标题（开局/结局） */
+.title{ font-size:30px; letter-spacing:.18em; font-weight:700; color:var(--accent);
+  text-shadow:calc(var(--aberr)*-1) 0 rgba(255,59,59,.6), var(--aberr) 0 rgba(52,224,255,.6), 0 0 16px color-mix(in srgb, var(--ink) 50%, transparent);
+  margin:6px 0 4px; }
+.subtitle{ color:var(--dim); font-size:13px; letter-spacing:.32em; margin-bottom:22px; }
+.lede{ color:color-mix(in srgb, var(--ink) 80%, var(--dim)); margin-bottom:24px; }
+
+/* 结局 */
+.ending{ white-space:pre-wrap; }
+.ending .tag{ display:inline-block; color:var(--bg); background:var(--danger); padding:2px 12px; letter-spacing:.1em; font-weight:700; margin-bottom:18px; }
+.ending .etitle{ font-size:26px; color:var(--accent); letter-spacing:.06em; margin:0 0 14px; text-shadow:0 0 14px color-mix(in srgb, var(--danger) 40%, transparent); }
+.ending .etext{ color:color-mix(in srgb, var(--ink) 85%, var(--dim)); font-style:italic; font-size:17px; }
+
+/* 设置齿轮 + 面板 */
+#gear{ position:fixed; top:14px; right:16px; z-index:60; width:34px; height:34px; line-height:32px; text-align:center;
+  background:color-mix(in srgb, var(--bg) 80%, transparent); color:var(--dim); border:1px solid color-mix(in srgb, var(--dim) 60%, transparent);
+  font-size:16px; cursor:pointer; transition:.2s; }
+#gear:hover{ color:var(--ink); border-color:var(--ink); transform:rotate(40deg); }
+#panel{ position:fixed; top:54px; right:16px; z-index:60; width:230px; padding:14px; font-size:13px;
+  background:color-mix(in srgb, var(--bg) 92%, #000); border:1px solid var(--dim); color:var(--ink);
+  box-shadow:0 8px 30px rgba(0,0,0,.6); }
+#panel h4{ margin:0 0 10px; font-size:12px; letter-spacing:.2em; color:var(--dim); font-weight:600; }
+#panel label{ display:flex; align-items:center; gap:8px; padding:5px 0; cursor:pointer; }
+#panel input{ accent-color:var(--ink); }
+#panel[hidden]{ display:none; }
+
+/* 入场编排 */
+#status{ animation:fadein .6s ease both; }
+#bar{ animation:fadein .6s ease .15s both; }
+@keyframes fadein{ from{opacity:0} to{opacity:1} }
+
+/* 无障碍：尊重 reduce-motion */
+@media (prefers-reduced-motion: reduce){
+  #crt,#grain,#text,.choice,#status,#bar{ animation:none !important; }
+  #text.reveal{ animation:none; }
+  body.tier-broken #text{ animation:none; }
+}
+@media (max-width:560px){ #app{ padding:30px 16px 50px; } .title{ font-size:24px; } }
+</style></head>
+<body class="tier-calm">
+  <div id="vignette" aria-hidden="true"></div>
+  <div id="crt" aria-hidden="true"></div>
+  <div id="grain" aria-hidden="true"></div>
+  <button id="gear" title="设置" aria-label="设置">⚙</button>
+  <div id="panel" hidden></div>
+  <div id="app">
+    <div id="status"></div>
+    <div id="text"></div>
+    <div id="choices"></div>
+    <div id="bar"></div>
+  </div>
+  <script>// ===== engine.js =====
+// engine.js — 纯逻辑，无 DOM，Node 可测。挂 globalThis.GAME。禁用 import/export。
+(function (g) {
+  const GAME = (g.GAME = g.GAME || {});
+  GAME.levels = GAME.levels || {};
+  GAME.items = GAME.items || {};
+  GAME.entities = GAME.entities || {};
+  GAME.orgs = GAME.orgs || {};
+  GAME.endings = GAME.endings || {};
+  GAME.starts = GAME.starts || {};
+
+  GAME.clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+
+  // 种子化 RNG（mulberry32），可复现
+  GAME.makeRng = function (seed) {
+    let a = seed >>> 0;
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  };
+
+  GAME.sanityTier = function (s) {
+    if (s >= 70) return 'calm';
+    if (s >= 40) return 'unease';
+    if (s >= 15) return 'dread';
+    return 'broken';
+  };
+
+  GAME.newState = function (startId, seed) {
+    const start = GAME.starts[startId];
+    if (!start) throw new Error('unknown start: ' + startId);
+    return {
+      level: start.level, node: start.node,
+      sanity: 100, thirst: 0, stamina: 100, turns: 0,
+      inv: Object.assign({}, start.inv || {}),
+      flags: {}, trust: 0, visited: {}, seed: seed >>> 0,
+      redCooldown: 0, ended: null,
+    };
+  };
+
+  GAME.goto = function (state, target) {
+    let level = state.level, node = target;
+    const i = target.indexOf(':');
+    if (i >= 0) { level = target.slice(0, i); node = target.slice(i + 1); }
+    state.level = level; state.node = node;
+    const key = level + ':' + node;
+    state.visited[key] = (state.visited[key] || 0) + 1;
+  };
+
+  GAME.dropLevel = function (state) {
+    const rng = GAME.makeRng((state.seed + state.turns) >>> 0);
+    const pool = GAME.DROP_POOL && GAME.DROP_POOL.length ? GAME.DROP_POOL : ['L0:entry'];
+    GAME.goto(state, pool[Math.floor(rng() * pool.length)]);
+  };
+
+  GAME.applyEffects = function (state, effects) {
+    if (!effects) return state;
+    for (const e of effects) {
+      const op = e[0], a = e[1], b = e[2];
+      switch (op) {
+        case 'sanity': state.sanity = GAME.clamp(state.sanity + a, 0, 100); break;
+        case 'thirst': state.thirst = GAME.clamp(state.thirst + a, 0, 100); break;
+        case 'stamina': state.stamina = GAME.clamp(state.stamina + a, 0, 100); break;
+        case 'give': state.inv[a] = (state.inv[a] || 0) + (b == null ? 1 : b); break;
+        case 'take':
+          state.inv[a] = Math.max(0, (state.inv[a] || 0) - (b == null ? 1 : b));
+          if (!state.inv[a]) delete state.inv[a];
+          break;
+        case 'flag': state.flags[a] = (b == null ? true : b); break;
+        case 'trust': state.trust += a; break;
+        case 'drop': GAME.dropLevel(state); break;
+        default: throw new Error('unknown effect op: ' + op);
+      }
+    }
+    return state;
+  };
+
+  GAME.tick = function (state) {
+    state.turns += 1;
+    const rng = GAME.makeRng((state.seed * 7919 + state.turns) >>> 0);
+    let drain = 1 + Math.floor(rng() * 3);
+    if (state.flags.addicted) drain += 1;
+    const lvl = GAME.levels[state.level];
+    if (lvl && lvl.safe) drain = -5;
+    state.sanity = GAME.clamp(state.sanity - drain, 0, 100);
+    state.thirst = GAME.clamp(state.thirst + 2, 0, 100);
+    if (state.thirst >= 90) state.stamina = GAME.clamp(state.stamina - 5, 0, 100);
+    if (state.sanity <= 0 && !state.ended) state.ended = 'sanity_zero';
+    if (state.stamina <= 0 && !state.ended) state.ended = 'collapse';
+    return state;
+  };
+
+  GAME.currentNode = function (state) {
+    const lvl = GAME.levels[state.level];
+    if (!lvl) throw new Error('no level ' + state.level);
+    const node = lvl.nodes[state.node];
+    if (!node) throw new Error('no node ' + state.level + ':' + state.node);
+    return node;
+  };
+
+  GAME.visibleChoices = function (state) {
+    const node = GAME.currentNode(state);
+    return (node.choices || []).filter(c => !c.requires || c.requires(state));
+  };
+
+  GAME.choose = function (state, idx) {
+    const c = GAME.visibleChoices(state)[idx];
+    if (!c) throw new Error('bad choice idx ' + idx);
+    if (Array.isArray(c.effects)) GAME.applyEffects(state, c.effects);
+    if (c.ending) { state.ended = c.ending; return state; }
+    if (c.goto) GAME.goto(state, c.goto);
+    if (!c.noTick && !state.ended) GAME.tick(state);
+    if (!state.ended) {
+      const n = GAME.currentNode(state);
+      if (n.onEnter) {
+        const eff = (typeof n.onEnter === 'function') ? n.onEnter(state) : n.onEnter;
+        if (Array.isArray(eff)) GAME.applyEffects(state, eff);
+      }
+    }
+    return state;
+  };
+
+  GAME.nodeText = function (state) {
+    const node = GAME.currentNode(state);
+    let t = node.text;
+    const tier = GAME.sanityTier(state.sanity);
+    if (node.variants && node.variants[tier] != null) t = node.variants[tier];
+    if (typeof t === 'function') t = t(state);
+    return String(t);
+  };
+
+  function b64enc(s) {
+    if (typeof btoa !== 'undefined') return btoa(unescape(encodeURIComponent(s)));
+    return Buffer.from(s, 'utf8').toString('base64');
+  }
+  function b64dec(s) {
+    if (typeof atob !== 'undefined') return decodeURIComponent(escape(atob(s)));
+    return Buffer.from(s, 'base64').toString('utf8');
+  }
+  GAME.serialize = (state) => b64enc(JSON.stringify(state));
+  GAME.deserialize = (str) => JSON.parse(b64dec(str));
+})(typeof window !== 'undefined' ? window : globalThis);
+
+
+// ===== data/items.js =====
+(function (g) {
+  const GAME = (g.GAME = g.GAME || {}); GAME.items = GAME.items || {};
+  const I = GAME.items;
+  I.almond_grey  = { id:'almond_grey',  name:'杏仁水·灰', desc:'最基础的营养来源。', use:[['thirst',-50],['stamina',30],['sanity',15]] };
+  I.almond_green = { id:'almond_green', name:'杏仁水·绿', desc:'提神，但会成瘾。', use:[['stamina',50],['flag','addicted',true]] };
+  I.almond_red   = { id:'almond_red',   name:'杏仁水·红', desc:'药用，可驱退剥皮者；过量致癌。', use:[['sanity',10],['flag','took_red',true]], cooldown:30 };
+  I.almond_blue  = { id:'almond_blue',  name:'杏仁水·蓝', desc:'抗心灵影响，稳定理智。', use:[['sanity',30]] };
+  I.firesalt   = { id:'firesalt',   name:'火盐',   desc:'点燃可短暂驱退实体。', use:[['flag','firesalt_ready',true]] };
+  I.mirror     = { id:'mirror',     name:'镜子',   desc:'可验明拟态 / 剥皮者。', use:[['flag','mirror_used',true]] };
+  I.liquid_pain= { id:'liquid_pain',name:'液态痛苦',desc:'某些组织的硬通货。', use:[] };
+  I.flashlight = { id:'flashlight', name:'手电',   desc:'照亮黑暗，消耗电池。', use:[] };
+  I.battery    = { id:'battery',    name:'电池',   desc:'手电的燃料。', use:[] };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+
+// ===== data/entities.js =====
+(function (g) {
+  const GAME = (g.GAME = g.GAME || {}); GAME.entities = GAME.entities || {};
+  const E = GAME.entities;
+  E.hound       = { id:'hound',       name:'Hound（猎犬）',         rule:'循声捕猎；远离声源、保持安静。' };
+  E.smiler      = { id:'smiler',      name:'Smiler（微笑者）',       rule:'潜伏黑暗，露出发光笑脸；不可直视，避入全黑区。' };
+  E.skinstealer = { id:'skinstealer', name:'Skin-Stealer（剥皮者）', rule:'伪装成同伴；用镜子或杏仁水·红验明。' };
+  E.facelings   = { id:'facelings',   name:'Facelings（无面人）',    rule:'多数被动；勿模仿其行为、勿挑衅。' };
+  E.deathmoth   = { id:'deathmoth',   name:'Deathmoth（死亡蛾）',    rule:'受光源吸引；黑暗中勿久开手电。' };
+  E.partygoer   = { id:'partygoer',   name:'Partygoer（派对客）',    rule:'永恒狂欢；绝不加入、不进食其食物。' };
+  E.wretch      = { id:'wretch',      name:'Wretch（可怜虫）',       rule:'扭曲爬行；保持距离、勿触碰。' };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+
+// ===== data/orgs.js =====
+(function (g) {
+  const GAME = (g.GAME = g.GAME || {}); GAME.orgs = GAME.orgs || {};
+  GAME.orgs.meg  = { id:'meg',  name:'M.E.G.（主要探索者集团）', stance:'援助', desc:'层级测绘与互助，发放杏仁水与情报。' };
+  GAME.orgs.uec  = { id:'uec',  name:'UEC（无垠探索者联盟）',    stance:'硬核', desc:'深潜探索、记录未知层级，risk-tolerant。' };
+  GAME.orgs.lost = { id:'lost', name:'The Lost（迷失者）',        stance:'危险邪教', desc:'崇拜后室本身，诱骗流浪者交出自我。' };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+
+// ===== data/endings.js =====
+(function (g) {
+  const GAME = (g.GAME = g.GAME || {}); GAME.endings = GAME.endings || {};
+  const E = GAME.endings;
+  const mk = (id, title, text) => (E[id] = { id, title, text });
+  mk('escape',       '逃回前厅',         '一扇本不该存在的门后，是熟悉的雨夜街道。你回来了——但你知道，墙后的嗡鸣再不会真正消失。');
+  mk('trapped_l0',   '困死阈界',         '杏仁水喝光了。黄色的走廊没有尽头，也没有人。你成了那 85% 的一员。');
+  mk('sanity_zero',  '成为后室的一部分', '你分不清哪句低语是自己的了。墙纸的纹路开始随你呼吸起伏。你一直都在这里，不是吗？');
+  mk('collapse',     '力竭',             '双腿再不肯前进。荧光灯的嗡鸣是你听到的最后声音。');
+  mk('replaced',     '被剥皮者取代',     '"同伴"侧过头，咧开一道不属于人的笑。你没用镜子验过它。');
+  mk('smiler_eaten', '被微笑吞噬',       '黑暗里那道笑越来越近。你直视了它。');
+  mk('join_meg',     '加入 M.E.G.',      '探险队收留了你。你学会了在这里活下去，并把杏仁水分给下一个迷失者。');
+  mk('red_loop',     '永坠红房间',       '又一次推开那扇门，又一次是同一条走廊。第几次了？数字也开始撒谎。');
+  mk('reach_end',    '抵达终焉',         '尽头是一片温暖的虚无。你停下脚步，不再害怕。这里就是 The End。');
+  mk('cult_lost',    '迷失于邪教',       'The Lost 教众围拢过来，许诺安宁。你交出了自己——连同名字。');
+})(typeof window !== 'undefined' ? window : globalThis);
+
+
+// ===== data/starts.js =====
+(function (g) {
+  const GAME = (g.GAME = g.GAME || {}); GAME.starts = GAME.starts || {};
+  GAME.starts.warehouse = { id:'warehouse', label:'仓库夜班', level:'L0', node:'entry',
+    inv:{ almond_grey:2, flashlight:1, battery:2 },
+    intro:'加完夜班，仓库 B 区最里头那条没人走的过道。你踩到一块松动的地砖——' };
+  GAME.starts.campus = { id:'campus', label:'校园走廊', level:'L0', node:'entry_campus',
+    inv:{ almond_grey:1, battery:1 },
+    intro:'深夜的教学楼，应急灯惨白。你拐进一条从没注意过的走廊——' };
+  GAME.starts.hotel = { id:'hotel', label:'酒店电梯（高难）', level:'L5', node:'entry',
+    inv:{ almond_grey:1 },
+    intro:'电梯数字跳过了你按的楼层。门开时，地毯的花纹不对——' };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+
+// ===== data/levels/L0.js =====
+(function (g) {
+  const GAME = (g.GAME = g.GAME || {}); GAME.levels = GAME.levels || {};
+  GAME.levels.L0 = {
+    id:'L0', name:'Level 0 阈界', class:1, danger:'孤立致死', safe:false,
+    entities:['hound'],
+    nodes:{
+      entry:{ id:'entry',
+        text:'你趴在浸软的地毯上。抬起头——无穷无尽的黄。泛黄的墙纸一直延伸到视线尽头，头顶的荧光灯发出持续的、低频的嗡鸣。你喊了一声，声音被房间吃掉，没有一点回响。',
+        variants:{ dread:'……黄。到处是黄。嗡鸣里好像夹着谁在喊你的名字——但这里不该有别人。', broken:'墙在呼吸。地毯在数你的脚步。你一直都在这儿，不是吗？这里不该有别人。这里不该有别人。' },
+        choices:[
+          { label:'选定一个方向，一直走', goto:'corridors', effects:[['stamina',-5]] },
+          { label:'原地坐下，等待救援', goto:'wait' },
+        ]},
+      wait:{ id:'wait',
+        text:'你靠墙坐下。时间在荧光灯的嗡鸣里失去刻度。没有人来。口越来越干。',
+        choices:[
+          { label:'还是起身去找出口', goto:'corridors' },
+          { label:'继续等……（危险）', goto:'wait', effects:[['sanity',-8],['thirst',15]] },
+          { label:'放弃', ending:'trapped_l0' },
+        ]},
+      corridors:{ id:'corridors',
+        text:'一模一样的房间，一个接一个。你回头想找来路——身后的布局已经不一样了（边缘移位）。前方岔出两条路：一条尽头的灯在闪烁，另一条没入彻底的黑暗。',
+        onEnter:[['sanity',-3]],
+        choices:[
+          { label:'走向闪烁的灯', goto:'flicker' },
+          { label:'探入黑暗区找补给', goto:'blackout' },
+          { label:'喝一口杏仁水·灰', requires:(s)=>!!s.inv.almond_grey, goto:'corridors', effects:[['take','almond_grey',1],['thirst',-50],['sanity',15],['stamina',30]], noTick:true },
+        ]},
+      blackout:{ id:'blackout',
+        text:'光全部消失。积液没过脚踝。某处传来低沉的、循声而来的喘息——Hound。它靠声音狩猎。',
+        onEnter:[['sanity',-8]],
+        choices:[
+          { label:'屏住呼吸，静止不动', goto:'blackout_safe' },
+          { label:'打开手电照路', requires:(s)=>!!s.inv.flashlight, goto:'blackout_light' },
+          { label:'转身狂奔', goto:'hound_death' },
+        ]},
+      blackout_safe:{ id:'blackout_safe',
+        text:'你停住。喘息声在两步外徘徊，又缓缓远去。黑暗里你摸到一个被遗弃的背包。',
+        onEnter:[['give','almond_grey',1]],
+        choices:[ { label:'摸回有光的方向', goto:'flicker', effects:[['sanity',5]] } ]},
+      blackout_light:{ id:'blackout_light',
+        text:'光柱亮起的瞬间，喘息声骤然加速冲来——Hound 循着你暴露的位置。',
+        choices:[
+          { label:'立刻关灯静止', goto:'blackout_safe', effects:[['sanity',-6]] },
+          { label:'举灯直面（错误）', goto:'hound_death' },
+        ]},
+      hound_death:{ id:'hound_death',
+        text:'你的脚步声就是它的地图。黑暗里，最后一声是你自己的。',
+        choices:[ { label:'……', ending:'collapse' } ]},
+      flicker:{ id:'flicker',
+        text:'闪烁的灯下，有一面墙在轻微地"抖动"——像没渲染完的纹理。这就是传说中的出口：撞穿它，去往 Level 1。',
+        choices:[
+          { label:'后退几步，全力撞穿', goto:'L1:entry', effects:[['stamina',-10],['sanity',5]] },
+          { label:'再去别处看看', goto:'corridors' },
+        ]},
+      entry_campus:{ id:'entry_campus',
+        text:'你伸手扶墙——指尖穿了过去。"刺啦"一声，应急灯的白光变成了泛黄的、嗡鸣的、潮湿的无尽走廊。你也滑了进来。',
+        choices:[ { label:'站起来，看看四周', goto:'entry' } ]},
+    }
+  };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+
+// ===== data/levels/L1.js =====
+(function (g) {
+  const GAME = (g.GAME = g.GAME || {}); GAME.levels = GAME.levels || {};
+  GAME.levels.L1 = {
+    id:'L1', name:'Level 1 宜居地带', class:1, danger:'实体出没', safe:false,
+    entities:['smiler','skinstealer'],
+    nodes:{
+      entry:{ id:'entry',
+        text:'你撞穿墙，摔进一个空旷得多的空间：裸露的水泥柱、堆叠的木箱、远处管道滴水。这里能住人——也意味着，有别的东西住在这里。',
+        onEnter:[['sanity',5]],
+        choices:[
+          { label:'寻找可据守的角落', goto:'hub' },
+          { label:'循着滴水声探索', goto:'pipes' },
+        ]},
+      hub:{ id:'hub', safe:true,
+        text:'你找到一个三面是墙的凹间，搬来木箱堵住开口。这里相对安全，可以喘口气。',
+        choices:[
+          { label:'休整（存档点）', goto:'hub', noTick:true, effects:[['sanity',8]] },
+          { label:'去管道区找水', goto:'pipes' },
+          { label:'前往更深处的裂口', goto:'bottleneck' },
+        ]},
+      pipes:{ id:'pipes',
+        text:'管道在滴落浑浊的水。一个身影从阴影里走出，朝你挥手："终于又见到活人了！"——他看起来太正常了。',
+        onEnter:[['sanity',-4]],
+        choices:[
+          { label:'用镜子照他', requires:(s)=>!!s.inv.mirror, goto:'reveal_skinstealer', effects:[['flag','mirror_used',true]] },
+          { label:'递给他一瓶杏仁水·红', requires:(s)=>!!s.inv.almond_red, goto:'reveal_skinstealer', effects:[['take','almond_red',1]] },
+          { label:'信任他，跟他走', goto:'skinstealer_death' },
+          { label:'保持距离，绕开', goto:'hub', effects:[['sanity',-3]] },
+        ]},
+      reveal_skinstealer:{ id:'reveal_skinstealer',
+        text:'镜中没有他的倒影。"他"的笑僵在脸上，皮肤下的东西开始蠕动——剥皮者。你转身就跑，它没有追来（它只在伪装时动手）。',
+        choices:[ { label:'退回安全角', goto:'hub', effects:[['sanity',-6]] } ]},
+      skinstealer_death:{ id:'skinstealer_death',
+        text:'你没有验过他。走到无人处时，"他"侧过头，咧开一道不属于人的笑。',
+        choices:[ { label:'……', ending:'replaced' } ]},
+      bottleneck:{ id:'bottleneck',
+        text:'空间尽头是一道向下的裂口，暖风从里面涌出，带着甜腻的派对气味（下面是 Level Fun），也有一条积水的管道通向更黑的深处（Level 2）。墙角蜷着一个人——他胸口别着 M.E.G. 的徽记。',
+        choices:[
+          { label:'上前与 M.E.G. 探员交谈', goto:'meg' },
+          { label:'钻进甜味的暖风（→ Level Fun）', goto:'LFun:entry' },
+          { label:'走积水管道（→ Level 2）', goto:'L2:entry' },
+        ]},
+      meg:{ id:'meg',
+        text:'"独行很难活，"他说，"我们 M.E.G. 在做层级测绘。给你点补给——想清楚要不要加入。"他递来杏仁水和一面小镜子。',
+        onEnter:[['give','almond_grey',1],['give','mirror',1],['flag','met_meg',true],['trust',2]],
+        choices:[
+          { label:'答应加入 M.E.G.', requires:(s)=>s.trust>=2, ending:'join_meg' },
+          { label:'道谢，独自继续', goto:'bottleneck' },
+        ]},
+    }
+  };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+
+// ===== data/levels/L2.js =====
+(function (g) {
+  const GAME = (g.GAME = g.GAME || {}); GAME.levels = GAME.levels || {};
+  GAME.levels.L2 = {
+    id:'L2', name:'Level 2 废弃公共带', class:3, danger:'实体密布·趋光致死', safe:false,
+    entities:['deathmoth','wretch'],
+    nodes:{
+      entry:{ id:'entry',
+        text:'积水的管道把你吐进一条狭窄的通道。空气闷热、潮湿，混着铁锈和霉味。两侧是腐朽的混凝土墙，墙上、天花板上密布着早已停转的工业机械。一盏荧光灯在前方闪烁，发出橙白色的、不连贯的嗡鸣，再往前——是一段没有灯的黑暗。通道以四十五度角折向两侧，规整得像有人用尺子量过。',
+        variants:{
+          dread:'管道把你吐了出来。闷热。机械停着，但你总觉得有一台在你背后悄悄转了半圈。荧光灯一闪一闪，每次熄灭，黑暗里都好像多站了一个东西。',
+          broken:'你又被吐了出来。第几次了？墙是棕的，灯是橙的，黑是黑的。机械们在记你的脚步。别开灯。它们喜欢光。别开灯。别——'
+        },
+        onEnter:[['sanity',-3]],
+        choices:[
+          { label:'走向闪烁的荧光灯', goto:'junction' },
+          { label:'摸黑探入无灯的通道', goto:'dark_hall' },
+        ]},
+      junction:{ id:'junction',
+        text:'你走到那盏挣扎的荧光灯下。这里是一个四十五度的岔口：一条通道墙上漆着褪色的紫色箭头，另一条堆满了油桶和缠绕的延长线。脚边散落着工具和碎玻璃，踩上去会咔咔作响。墙面一碰，指尖就沾上泥棕色的残渣。',
+        choices:[
+          { label:'顺着紫色箭头走', goto:'purple_lamp' },
+          { label:'翻找油桶和杂物堆', goto:'scavenge' },
+          { label:'回到管道入口那侧', goto:'entry' },
+        ]},
+      scavenge:{ id:'scavenge',
+        text:'你蹲下翻找。大多是锈死的金属零件，但一个翻倒的工具箱里有惊喜：一支手电筒，还有几节电池滚在角落。停电之前，有人把这些落在了这里。',
+        onEnter:[['give','flashlight',1],['give','battery',1],['stamina',-4]],
+        choices:[
+          { label:'收好手电，继续探索', goto:'junction', effects:[['sanity',3]] },
+        ]},
+      purple_lamp:{ id:'purple_lamp',
+        text:'紫色应急灯在通道尽头幽幽亮着——这是大停电后唯一还供着电的标识，指向可通行区。灯下是一扇半开的金属门，里面像是个被遗弃的小据点：发霉的睡袋、空罐头、一张钉在墙上、字迹被水泡花的地图，角落还有半块流浪者援助会的木牌。',
+        onEnter:[['sanity',4]],
+        choices:[
+          { label:'进入据点歇脚', goto:'safehouse' },
+          { label:'不进，沿紫灯继续深入', goto:'deep_tunnel' },
+        ]},
+      safehouse:{ id:'safehouse',
+        text:'你拉过木箱顶住门，在紫色应急灯的微光里坐下。机械的嗡鸣被门挡在了外面。这里不算安全，但至少能喘口气、记下走过的路。墙上的地图角落写着一行小字："灯=死。摸黑走。"',
+        choices:[
+          { label:'休整（存档点）', goto:'safehouse', noTick:true, effects:[['sanity',8]] },
+          { label:'翻找据点里的补给', requires:(s)=>!s.flags.l2_looted, goto:'safehouse_loot' },
+          { label:'离开据点，沿紫灯深入', goto:'deep_tunnel' },
+        ]},
+      safehouse_loot:{ id:'safehouse_loot',
+        text:'你在睡袋下摸到一个没被搬空的应急包：两瓶杏仁水·灰，还有一小袋火盐。罐头都空了，但水是真的。你把残渣在裤腿上擦掉。',
+        onEnter:[['give','almond_grey',2],['give','firesalt',1],['flag','l2_looted',true]],
+        choices:[
+          { label:'回到据点', goto:'safehouse' },
+        ]},
+      deep_tunnel:{ id:'deep_tunnel',
+        text:'紫灯一盏接一盏，越来越稀疏，间隔的黑暗越来越长。隧道始终以五米的整数倍折转，欧几里得得令人安心，又令人不安。在两盏紫灯之间最深的一段黑里，你听见极轻的振翅声——很多翅膀，干燥的、纸一样的扑动。空气里浮着细小的鳞粉。',
+        onEnter:[['sanity',-6]],
+        choices:[
+          { label:'打开手电照清前路', requires:(s)=>!!s.inv.flashlight, goto:'moth_light' },
+          { label:'保持黑暗，贴墙慢慢挪过去', goto:'moth_dark' },
+          { label:'退回紫灯下等振翅声远去', goto:'purple_lamp', effects:[['sanity',-4],['stamina',-4]] },
+        ]},
+      moth_light:{ id:'moth_light',
+        text:'光柱一亮，黑暗瞬间活了过来。无数 Death Moth（死亡飞蛾）从管道缝隙里涌出，全部朝着你手中的光俯冲——它们趋光，而你恰好成了这条隧道里唯一的太阳。鳞粉糊住你的口鼻，翅膀拍打你的眼睛，你想扔掉手电，但它们已经裹住了你。',
+        onEnter:[['sanity',-15]],
+        choices:[
+          { label:'死死攥住手电，想看清出路（错误）', goto:'moth_death' },
+          { label:'把发亮的手电狠狠扔向远处，趁机扑进黑暗', requires:(s)=>!!s.inv.flashlight, goto:'moth_escape', effects:[['take','flashlight',1],['stamina',-12]] },
+        ]},
+      moth_death:{ id:'moth_death',
+        text:'你举着光，它们就追着光。最后你连自己举着的是什么都看不清了——只有铺天盖地的、干燥的扑动，和喉咙里越积越厚的鳞粉。光是它们的规则，而你违反了黑暗。',
+        choices:[
+          { label:'……', ending:'collapse' },
+        ]},
+      moth_escape:{ id:'moth_escape',
+        text:'手电飞出去，光在十几米外砸在墙上。整片蛾群"哗"地转向那个发亮的点，把你留在了重新降临的黑暗里。你蜷在墙根剧烈咳嗽，吐出满口鳞粉，听着远处的振翅声渐渐凝成一团。你活了下来——但手电没了，往后只能摸黑。',
+        onEnter:[['sanity',-8]],
+        choices:[
+          { label:'摸黑继续，寻找出口', goto:'corridor_ambush' },
+        ]},
+      moth_dark:{ id:'moth_dark',
+        text:'你不敢点亮任何东西。贴着冰凉湿滑的墙，一寸一寸地挪。鳞粉的振翅声在头顶盘旋，却始终找不到目标——没有光，它们就找不到你。漫长的几分钟后，你挪进了下一盏紫灯的安全光晕里。蛾群被甩在身后的黑暗中。',
+        onEnter:[['sanity',2]],
+        choices:[
+          { label:'继续前行', goto:'corridor_ambush' },
+        ]},
+      corridor_ambush:{ id:'corridor_ambush',
+        text:'通道变得更窄、更脏。地上的积水里漂着啃剩的骨头和毛发。你刚拐过一个四十五度的弯，黑暗的低处就传出此起彼伏的吱叫与爪子刮擦混凝土的声音——Wretch（尸鼠），成群结队，专挑这种逼仄的走廊伏击落单的旅人。它们已经闻到你了。',
+        onEnter:[['sanity',-7]],
+        choices:[
+          { label:'撒一把火盐划出一道隔离线', requires:(s)=>!!s.inv.firesalt, goto:'wretch_repel', effects:[['take','firesalt',1]] },
+          { label:'丢出一瓶杏仁水引开它们，趁乱冲过', requires:(s)=>!!s.inv.almond_grey, goto:'wretch_distract', effects:[['take','almond_grey',1]] },
+          { label:'低头硬冲过鼠群', goto:'wretch_swarm' },
+        ]},
+      wretch_repel:{ id:'wretch_repel',
+        text:'火盐在积水里嘶嘶作响，腾起一道刺鼻的白烟。尸鼠的吱叫变成了惊惶的尖叫，潮水般退回黑暗。你踩着那条短暂的隔离线快步穿过通道，盐烟在身后弥散。它们没有追上来。',
+        onEnter:[['sanity',3]],
+        choices:[
+          { label:'穿过通道，前方有强烈气流', goto:'bottleneck' },
+        ]},
+      wretch_distract:{ id:'wretch_distract',
+        text:'玻璃瓶在远处碎裂，杏仁水的甜腥味在湿热的空气里炸开。鼠群"轰"地朝声音和气味涌去。你贴着对侧的墙拼命冲刺，爪子刮擦声在身后追了几步，又被食物的诱惑拽了回去。你跌跌撞撞地冲出了这段走廊。',
+        onEnter:[['stamina',-10],['sanity',-2]],
+        choices:[
+          { label:'喘着气向前，前方有强烈气流', goto:'bottleneck' },
+        ]},
+      wretch_swarm:{ id:'wretch_swarm',
+        text:'你低头猛冲。第一只咬住小腿，第二只攀上后背，然后是第十只、第百只。狭窄的走廊里没有躲闪的余地，黑暗本身仿佛长出了无数牙齿。你的奔跑变成了倒下，而它们从不挑食。',
+        choices:[
+          { label:'……', ending:'sanity_zero' },
+        ]},
+      bottleneck:{ id:'bottleneck',
+        text:'通道在前方豁然分成三岔，每一岔都有不同的气流。左侧一扇门缝里渗出冷而潮的霉味，门上残留着无标记门特有的、毫无规律的划痕（那是回 Level 1 的方向）。正前方是一扇沉重的金属门，门后传来更深、更冷的回声，像无尽下行的楼梯井——下面是 Level 3。右侧墙上一盏蓝色闪灯有节奏地明灭，门缝里透出与这里截然不同的光。',
+        onEnter:[['flag','reached_l2_hub',true]],
+        choices:[
+          { label:'推开正前方的金属门（→ Level 3）', goto:'L3:entry', effects:[['stamina',-6]] },
+          { label:'退回有霉味的左门（→ Level 1）', goto:'L1:entry', effects:[['sanity',2]] },
+          { label:'凑近蓝色闪灯看个究竟', goto:'blue_light' },
+        ]},
+      blue_light:{ id:'blue_light',
+        text:'你把脸贴近门缝。蓝灯的节奏不对——它不是在闪烁，是在"呼吸"，一明一暗间，门后似乎有什么正配合着那节奏轻轻摇晃。生存手册说蓝色闪灯通往别处，但没说门后会不会先有东西在等你。这扇门，你拿不准。',
+        choices:[
+          { label:'还是别开这扇门，退回三岔口', goto:'bottleneck', effects:[['sanity',-3]] },
+          { label:'推开正前方的金属门下行（→ Level 3）', goto:'L3:entry', effects:[['stamina',-6]] },
+        ]},
+      dark_hall:{ id:'dark_hall',
+        text:'你不顾闪烁的灯，径直走进了无灯的黑暗。脚下是没过脚踝的积水，伸手不见五指。机械的嗡鸣消失了，取而代之的是一种密集的、干燥的振翅声——这片黑暗里，有东西在飞。你意识到自己走进了 Death Moth 的巢穴深处。',
+        onEnter:[['sanity',-9]],
+        choices:[
+          { label:'打开手电看清四周', requires:(s)=>!!s.inv.flashlight, goto:'moth_light' },
+          { label:'循着记忆原路摸回闪烁的灯', goto:'entry', effects:[['sanity',-5],['stamina',-6]] },
+          { label:'继续在黑暗里盲目深入', goto:'corridor_ambush', effects:[['sanity',-4]] },
+        ]},
+    }
+  };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+
+// ===== data/levels/L3.js =====
+(function (g) {
+  const GAME = (g.GAME = g.GAME || {}); GAME.levels = GAME.levels || {};
+  GAME.levels.L3 = {
+    id:'L3', name:'Level 3 发电站', class:2, danger:'毒气·自燃·实体密集', safe:false,
+    entities:['facelings'],
+    nodes:{
+      entry:{ id:'entry',
+        text:'积水管道把你吐进一条狭窄的工业走廊。棕色砖墙覆满灰尘，铜管沿天花板蜿蜒，某处机械在稳定地、永不停歇地运转。空气是热的，66 度往上，越往里越闷。然后你注意到手机——信号满格。在后室满格。',
+        variants:{
+          dread:'……热。铜管在低处嗡嗡作响，像有什么在管子里游动。信号满格——可这地方连一个活人都没有，谁在那头？',
+          broken:'管子在数你的心跳。每一根都通向你。满格，满格，满格——它们都在拨你的号。别接。别接。别接。' },
+        onEnter:[['sanity',-3]],
+        choices:[
+          { label:'蹭这后室最强的 Wi-Fi，下载 M.E.G. 数据库', goto:'wifi' },
+          { label:'沿运转的机械声往里走', goto:'corridor', effects:[['stamina',-5]] },
+          { label:'贴墙慢行，避开头顶的管道', goto:'corridor', effects:[['stamina',-8],['sanity',2]] },
+        ]},
+      wifi:{ id:'wifi',
+        text:'你连上信号，M.E.G. 的层级图谱一条条灌进来。屏幕亮着的几分钟里，你第一次觉得不那么孤单。数据库标注：本层有武装基地 Gamma，向"运转声最响处"走可寻获补给；另警告——黑色管道液体剧毒，蒸气致命。',
+        onEnter:(s)=> s.flags.read_meg_db ? [] : [['flag','read_meg_db',true],['sanity',6]],
+        choices:[
+          { label:'记下警告，去找 Gamma 基地', goto:'corridor', effects:[['stamina',-5]] },
+          { label:'多留一会儿，给手电充上电', requires:(s)=>!!s.inv.flashlight && !s.flags.charged_l3, goto:'wifi', effects:[['give','battery',1],['flag','charged_l3',true],['sanity',2]], noTick:true },
+        ]},
+      corridor:{ id:'corridor',
+        text:'走廊在前方分岔，每条都一模一样地黑、一样地热。一条尽头有机械的火花在明灭；一条地面爬着一道黑色的、缓缓流淌的黏液，从破裂的管道渗出，散着刺鼻的甜腥。第三条窄得要侧身，深处隐约有人形静静站着，背对着你。',
+        onEnter:[['sanity',-4],['thirst',8]],
+        choices:[
+          { label:'走向火花明灭的机械区', goto:'machine' },
+          { label:'查看渗出黑液的破管', goto:'slime' },
+          { label:'侧身挤进窄道，靠近那个人形', goto:'faceling' },
+          { label:'退回去，找个能据守的死角', goto:'safehouse' },
+        ]},
+      slime:{ id:'slime',
+        text:'黑液在地上铺开，表面浮着一层油亮的膜，热气把甜腥的蒸气往上送。数据库说过这东西——神经毒，蒸气致命。但管道接口处卡着一个旧背包，半泡在黏液边缘。',
+        onEnter:[['sanity',-3]],
+        choices:[
+          { label:'屏息，用衣物裹手快速拽出背包', goto:'slime_loot', effects:[['stamina',-6],['sanity',-4]] },
+          { label:'不值得，原路退回岔口', goto:'corridor', effects:[['sanity',2]] },
+          { label:'凑近闻一下确认是不是真的有毒', goto:'slime_death' },
+        ]},
+      slime_loot:{ id:'slime_loot',
+        text:'你裹着衣袖、憋着一口气，把背包猛地拽上岸，立刻后退几步大口换气。背包里有一瓶杏仁水·灰，还有一小袋火盐——在这满是自燃机械的地方，火盐意外地让人安心。',
+        onEnter:[['give','almond_grey',1],['give','firesalt',1]],
+        choices:[
+          { label:'带着补给退回岔口', goto:'corridor', effects:[['sanity',4]] },
+        ]},
+      slime_death:{ id:'slime_death',
+        text:'你弯下腰。只闻了半口——喉咙像被人灌进了滚烫的钉子。视野从边缘开始烧黑，腿先于你做出了决定，跪进了那摊黑里。满格的信号还亮着，没人会收到你的最后一条消息。',
+        choices:[
+          { label:'……', ending:'collapse' },
+        ]},
+      machine:{ id:'machine',
+        text:'机械区轰鸣震耳，一台老旧的配电箱不停喷出火花，墙上的金属被烤得发烫，局部热得能闻到自己头发焦的味道。火花后面的工作台上躺着一支手电筒和几节电池——但你得从喷火花的箱子边上够过去。',
+        onEnter:[['sanity',-3],['stamina',-6]],
+        choices:[
+          { label:'抓一把火盐压住火花，再去取', requires:(s)=>!!s.inv.firesalt, goto:'machine_loot', effects:[['take','firesalt',1]] },
+          { label:'看准火花间隙，快速探手去够', goto:'machine_loot', effects:[['sanity',-5],['stamina',-5]] },
+          { label:'太危险，退回岔口', goto:'corridor' },
+        ]},
+      machine_loot:{ id:'machine_loot',
+        text:'你够到了工作台。手电筒还能亮，电池也是满的。在这种地方，光意味着活路——也意味着，你将被看见。',
+        onEnter:[['give','flashlight',1],['give','battery',1],['sanity',3]],
+        choices:[
+          { label:'收好装备，退回岔口', goto:'corridor' },
+          { label:'用新手电照向窄道里那个人形', requires:(s)=>!!s.inv.flashlight, goto:'faceling_light' },
+        ]},
+      safehouse:{ id:'safehouse',
+        text:'你退到一处被监狱式铁栏半封住的凹间，铁栏在一侧留了缺口，恰好能进出。三面是厚砖墙，听不见黏液的甜腥，机械声也被隔成了远处的白噪。Gamma 基地的一个游荡哨兵——一名 M.E.G. 探员——窝在角落，朝你点了点头，把半边地方让给你。',
+        onEnter:(s)=> s.flags.found_safehouse_l3 ? [] : [['flag','found_safehouse_l3',true],['trust',1]],
+        choices:[
+          { label:'休整（存档点）', goto:'safehouse', noTick:true, effects:[['sanity',8]] },
+          { label:'向探员讨一瓶水', requires:(s)=>!s.flags.got_meg_water_l3, goto:'safehouse', effects:[['give','almond_grey',1],['flag','got_meg_water_l3',true],['trust',1]], noTick:true },
+          { label:'问探员深层的去路', goto:'bottleneck' },
+          { label:'回到岔口继续探索', goto:'corridor' },
+        ]},
+      faceling:{ id:'faceling',
+        text:'窄道尽头，一个人形背对着你站着，纹丝不动。它有人的轮廓、人的衣服，可当它缓缓转过头——脸上什么都没有，只有一片平滑的、被荧光灯照得发亮的空白。Faceling（无面灵）。它们多半温和，只要你别表现出敌意，别盯着那张"脸"看太久。',
+        onEnter:[['sanity',-6]],
+        choices:[
+          { label:'垂下视线，缓慢侧身从它身边绕过', goto:'faceling_pass' },
+          { label:'举起手电直照它的"脸"，看清它', requires:(s)=>!!s.inv.flashlight, goto:'faceling_light' },
+          { label:'大喊一声吓退它', goto:'faceling_death' },
+        ]},
+      faceling_pass:{ id:'faceling_pass',
+        text:'你低着头，一步一步,贴着另一侧的砖墙挪过去。那片空白始终对着你转，却没有靠近。挤过窄道后，前方豁然是一条更深的主管道——通向本层的尽头。',
+        onEnter:[['sanity',3]],
+        choices:[
+          { label:'松一口气，走向深处的主管道', goto:'bottleneck' },
+          { label:'退回岔口', goto:'corridor' },
+        ]},
+      faceling_light:{ id:'faceling_light',
+        text:'光柱打在那片空白上。一瞬间，无数道人形从黑暗的窄道深处亮了出来——它们全都没有脸，全都把没有眼睛的"脸"转向了你刺眼的光。Faceling 不喜欢被强光直视。它们开始一起，朝光走来。',
+        onEnter:[['sanity',-10]],
+        choices:[
+          { label:'立刻关灯，垂下视线，缓慢后退', goto:'faceling_pass', effects:[['sanity',-4],['stamina',-4]] },
+          { label:'举着灯转身狂奔', goto:'faceling_death' },
+        ]},
+      faceling_death:{ id:'faceling_death',
+        text:'你违背了唯一的规矩——你让它们觉得你是威胁。那些没有脸的人形不紧不慢地围拢过来，安静得可怕。最后你看见的，是无数张空白的脸俯下来，凑近你，仿佛终于找到了一张可以借用的脸。',
+        choices:[
+          { label:'……', ending:'replaced' },
+        ]},
+      bottleneck:{ id:'bottleneck',
+        text:'主管道的尽头是一间巨大的发电室，机械的轰鸣在这里达到顶点。墙上两处异常并排存在：一侧，所有灯具都坏死了，那片绝对的黑暗深得不像影子，冷气从里面渗出，像一扇通往"熄灯"层的门；另一侧，墙上裂开一道荧光闪烁的缝，缝里没有走廊，只有一片刺眼的、不该存在的纯白——那是 Level !（感叹号层）的入口。无论哪条，都不会再回头。',
+        onEnter:[['sanity',-5]],
+        choices:[
+          { label:'回安全屋再喘口气', goto:'safehouse' },
+          { label:'踏入那片绝对的黑暗（→ 熄灯）', goto:'L6:entry', effects:[['stamina',-8],['sanity',-3]] },
+          { label:'钻进荧光的白缝（→ Level !）', goto:'LExcl:entry', effects:[['stamina',-8],['sanity',-3]] },
+        ]},
+    }
+  };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+
+// ===== data/levels/L5.js =====
+(function (g) {
+  const GAME = (g.GAME = g.GAME || {}); GAME.levels = GAME.levels || {};
+  GAME.levels.L5 = {
+    id:'L5', name:'Level 5 恐怖旅馆', class:2, danger:'美丽与恐怖并存', safe:false,
+    entities:['skinstealer','smiler'],
+    nodes:{
+      entry:{ id:'entry',
+        text:'你推开一扇旋转门，黄色走廊在身后合拢。脚下是厚实的红地毯，金色壁纸在水晶吊灯下泛光，某处老唱片机正放着 1920 年代的爵士乐。空气干净得反常——你裤脚的污泥正在地毯上自行褪去。前台无人，铜铃静静躺着。一切优雅，一切体面，体面得像一张盖在尸体上的桌布。',
+        variants:{
+          dread:'爵士乐里好像多了一个声部——很轻的、贴着你耳朵的哼唱。金壁纸上的花纹，刚才是不是有一张脸顺着你转过去了？污泥褪得太快了，快得像这地方急着抹掉你来过的痕迹。',
+          broken:'墙纸上全是脸。它们排着队看你，礼貌地、含笑地。唱片机在你脑子里放，你分不清哪段旋律是真的。前台的铃自己响了一声——叮。它在登记你。它早就给你留好了房间。' },
+        onEnter:[['sanity',-2]],
+        choices:[
+          { label:'穿过主厅，往灯火通明处走', goto:'main_hall' },
+          { label:'按响前台的铜铃', goto:'front_desk' },
+        ]},
+
+      front_desk:{ id:'front_desk',
+        text:'你按下铜铃。叮。爵士乐没停，但旅馆像是听见了。一名穿着熨帖制服的侍者从后厅滑出来，笑容标准得像印上去的。"欢迎光临，"他说，"住一晚？还是……找出口？"他的影子投在地毯上，方向和吊灯的光对不上。',
+        choices:[
+          { label:'问哪里有补给和安全的房间', goto:'homely', effects:[['trust',1]] },
+          { label:'直接问出口在哪', goto:'main_hall', effects:[['sanity',-3]] },
+          { label:'退开，不和他多说', goto:'main_hall' },
+        ]},
+
+      main_hall:{ id:'main_hall',
+        text:'主厅向四面无限延伸：一排排房门、错落的地板材质、缓缓升降的电梯，没有一台停在你这层。一块手写木牌斜插在迎宾台上——"家常酒店 Homely Hotel，沿红毯左转"。右侧一道狭长楼梯往下，飘出湿热的蒸汽与机油味（锅炉房）。正前方的舞厅大门虚掩，里面传出几百个人低声交谈的派对声——可门缝里黑着，没有一盏灯。',
+        onEnter:[['sanity',-3]],
+        choices:[
+          { label:'去家常酒店落脚', goto:'homely' },
+          { label:'循蒸汽下到锅炉房', goto:'boiler' },
+          { label:'推开舞厅大门', goto:'ballroom' },
+          { label:'喝一口杏仁水·灰', requires:(s)=>!!s.inv.almond_grey, goto:'main_hall', noTick:true, effects:[['take','almond_grey',1],['thirst',-50],['sanity',15],['stamina',30]] },
+        ]},
+
+      homely:{ id:'homely',
+        text:'红毯尽头是一间挂着暖黄灯串的酒馆——家常酒店。流浪者们围着壁炉分食罐头，墙上钉着层级地图。一个老向导给你倒了杯从墙内管道接来的杏仁水。"新来的，"她说，"两条活路：往回坠回那片黄走廊，或者从锅炉房深处熄了灯出去。但先记住一件事——这里有东西穿着人皮走动。验过再信。"她往你手里塞了样东西。',
+        variants:{
+          dread:'壁炉的火是暖的，可你总觉得围坐的人里，有一个的笑容比别人慢半拍才挂上去。',
+          broken:'他们的脸在火光里融成一片。"验过再信，"老向导说——可你已经不记得怎么验了，也不记得自己是不是人。' },
+        onEnter:(s)=> s.flags.met_homely ? [] : [['give','mirror',1],['give','almond_grey',1],['flag','met_homely',true],['trust',1]],
+        choices:[
+          { label:'休整（存档点）', goto:'homely', noTick:true, effects:[['sanity',8]] },
+          { label:'去舞厅碰运气找低概率出口', goto:'ballroom' },
+          { label:'下锅炉房，走熄灯出口', goto:'boiler' },
+          { label:'循老唱片机的声音去贝弗莉室', goto:'beverly' },
+        ]},
+
+      beverly:{ id:'beverly',
+        text:'你推开门，进入"永恒的舞厅"——贝弗莉室。数百扇门嵌满四壁，一桌未下完的麻将摆在中央，牌面温热，像刚有人离席。一个背对你的身影正在整理牌局，听见脚步，欢快地回头："哎呀，搭子来啦！坐、坐，正缺一个人。"他热情得无可挑剔，朝你伸出手——指甲缝里嵌着一圈干涸的、不属于自己的暗红。',
+        onEnter:[['sanity',-4]],
+        choices:[
+          { label:'用镜子照他', requires:(s)=>!!s.inv.mirror, goto:'reveal_skinstealer', effects:[['flag','mirror_used',true]] },
+          { label:'递给他一瓶杏仁水·红', requires:(s)=>!!s.inv.almond_red, goto:'reveal_skinstealer', effects:[['take','almond_red',1]] },
+          { label:'他这么热情，握手坐下', goto:'skinstealer_death' },
+          { label:'借口找洗手间，慢慢退出门', goto:'homely', effects:[['sanity',-3]] },
+        ]},
+
+      reveal_skinstealer:{ id:'reveal_skinstealer',
+        text:'镜面里——那把椅子是空的。"他"的笑容凝固，随即整张人皮像松脱的戏服一样滑塌，底下是湿亮的、过长的肢节：剥皮者（Skin-Stealer）。它不追正盯着它看的人，它只在你转过身、放下戒备时下手。你横着挪到门边，背贴着数百扇门退出去。其中一扇，门缝里漏出的不是旅馆的金光，而是熟悉的、泛黄的荧光——传说中的低概率出口，正好坠回那片黄走廊。',
+        onEnter:[['sanity',-6],['flag','saw_skinstealer',true]],
+        choices:[
+          { label:'闪身钻进那扇泛黄的门（→ Level 0）', goto:'L0:corridors', effects:[['stamina',-6]] },
+          { label:'先退回家常酒店稳住神', goto:'homely', effects:[['sanity',4]] },
+        ]},
+
+      skinstealer_death:{ id:'skinstealer_death',
+        text:'你握住了那只手——太凉，关节太多。等你反应过来转身要走，它早算准了这一刻。最后你看见的，是自己那张脸被它温柔地揭下来，对着镜子试穿，调整笑容的弧度，直到比你本人更像你。',
+        choices:[ { label:'……', ending:'replaced' } ]},
+
+      ballroom:{ id:'ballroom',
+        text:'舞厅没有灯，却挤满了"派对"——几百个声音在黑暗里碰杯、寒暄、低笑，可没有一个人影。空气里浮着甜腻的尘埃，触到皮肤就发痒。这是死亡飞蛾（Death Moth）的巢穴：它们靠这片"聚会的嗡语"诱人深入，鳞粉一旦吸饱，就会从内里啃噬。墙角立着一块掉漆的告示："请勿循声而行，请勿挥手驱赶，屏息低身，背墙退出。"',
+        onEnter:[['sanity',-6]],
+        choices:[
+          { label:'屏息低身，背贴墙慢慢退回', goto:'main_hall', effects:[['sanity',-4],['stamina',-5]] },
+          { label:'挥手扇开扑脸的鳞粉、循人声找门', goto:'moth_death' },
+        ]},
+
+      moth_death:{ id:'moth_death',
+        text:'你的动作把整片黑暗惊醒。"派对声"骤然合拢成振翅的轰鸣，无数飞蛾扑上口鼻。甜痒钻进肺里，从内壁开始一寸寸啃食。你想喊，吸进去的全是鳞粉。聚会，至此圆满——你成了今晚的主菜。',
+        choices:[ { label:'……', ending:'collapse' } ]},
+
+      boiler:{ id:'boiler',
+        text:'楼梯尽头是锅炉房：旧机器与工业管道纵横交错，蒸汽糊住视线，温度高得衬衫立刻贴上脊背。爵士乐在这里只剩闷响。深处一台主控盘上排着一列总闸，最末一根标着早已褪色的字——"夜间熄灯 / NIGHT-OUT"。家常酒店说过：从锅炉房熄了灯就能出去。但热浪里管道盘成迷宫，走错一步就是闷死在蒸汽里。',
+        variants:{
+          dread:'蒸汽里仿佛站着一排沉默的人形，是木灵，还是你自己被热气扭曲的影子？你不敢确认。',
+          broken:'管道在你眼里全长一个样。总闸有十根、一百根、还是只有一根？字早就化了。你伸手——朝哪个方向都行，反正你已经分不清出口和坟墓。' },
+        onEnter:[['sanity',-3],['stamina',-5]],
+        choices:[
+          { label:'扳下"夜间熄灯"总闸（→ Level 6）', goto:'lights_out' },
+          { label:'热得受不了，退回主厅', goto:'main_hall', effects:[['stamina',-4]] },
+        ]},
+
+      lights_out:{ id:'lights_out',
+        text:'你扳下总闸。全旅馆的灯、唱片机、那几百个看不见的声音——同时熄灭。绝对的黑里，蒸汽是温的，地面在轻轻下沉。脚下不再是锅炉房的水泥，而是某种潮湿、起伏、像活物表皮的东西。熄灯之后没有黎明：你正坠入下一层。',
+        onEnter:[['flag','lights_out',true]],
+        choices:[
+          { label:'随这片黑暗一起下沉（→ Level 6）', goto:'L6:entry', effects:[['sanity',-5],['stamina',-6]] },
+        ]},
+    }
+  };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+
+// ===== data/levels/L6.js =====
+(function (g) {
+  const GAME = (g.GAME = g.GAME || {}); GAME.levels = GAME.levels || {};
+  GAME.levels.L6 = {
+    id:'L6', name:'Level 6 熄灯', class:3, danger:'绝对黑暗·感官剥夺', safe:false,
+    entities:['smiler','hound'],
+    nodes:{
+      entry:{ id:'entry',
+        text:'门在你身后合上的那一刻，光就没了——不是变暗，是被一口吞掉。你伸手不见五指。脚下是光滑冰冷的混凝土，指尖贴上去的墙也是。极度的寂静压在耳膜上，你甚至听得见自己心跳的钝响。你站在一条看不见尽头的狭窄走廊里。官方记录称本层无确认实体——可黑暗里的东西，从不在乎记录。',
+        variants:{
+          dread:'黑暗不是空的。它有重量，贴着你的后颈。寂静里好像有人在很远处叫你的名字——用你母亲的声音。但她不在这里。她不该在这里。',
+          broken:'你睁着眼，闭着眼，没有区别。黑里有无数张脸贴着你转。它们在数你的呼吸。你已经在这条走廊里走了多久了？一天？一年？你还记得光是什么样吗？'
+        },
+        onEnter:[['sanity',-6]],
+        choices:[
+          { label:'伸手贴住右墙，循触觉摸索前进', goto:'right_wall', effects:[['stamina',-4]] },
+          { label:'打开手电，看清周围', requires:(s)=>!!s.inv.flashlight, goto:'flashlight_on' },
+          { label:'站在原地，先适应黑暗', goto:'stand_still' },
+        ]},
+
+      stand_still:{ id:'stand_still',
+        text:'你不动，等眼睛适应——但没有光可以适应。时间在纯黑里失去刻度。寂静开始"播放"东西：脚步、低语、某个房间里隐约的派对乐声。你分不清哪些是真的。',
+        onEnter:[['sanity',-8]],
+        choices:[
+          { label:'告诉自己那全是幻觉，开始摸墙走', goto:'right_wall', effects:[['sanity',4]] },
+          { label:'循着派对乐声走过去', goto:'lure_voice' },
+        ]},
+
+      right_wall:{ id:'right_wall',
+        text:'你贴着右墙一步步挪。混凝土平滑得没有一丝接缝，凉意顺着掌心爬上手臂。走了不知多久，指尖忽然探进一道凹陷——一个向左的岔口。同时，前方某处传来很轻的、有节奏的"嗒、嗒"——像有什么东西在硬地上慢慢踱步。',
+        onEnter:[['sanity',-3]],
+        choices:[
+          { label:'拐进左边岔口', goto:'rest_alcove' },
+          { label:'无视岔口，继续沿原墙直行', goto:'corridor_fork' },
+          { label:'喝一口杏仁水·灰压压神', requires:(s)=>!!s.inv.almond_grey, goto:'right_wall', noTick:true, effects:[['take','almond_grey',1],['thirst',-40],['sanity',12],['stamina',20]] },
+        ]},
+
+      rest_alcove:{ id:'rest_alcove',
+        text:'岔口尽头是一个三面封死的小凹间。你缩进去，背靠墙坐下。在这个角落里，声音从三面被混凝土挡住，只有一个开口要防。这是你在熄灯里能找到的、最接近"安全"的地方。你摸到地上有人留下的东西。',
+        onEnter:(s)=> s.flags.found_alcove ? [] : [['give','battery',1],['flag','found_alcove',true]],
+        choices:[
+          { label:'休整（存档点）', goto:'rest_alcove', noTick:true, effects:[['sanity',8]] },
+          { label:'摸索回主走廊', goto:'corridor_fork', effects:[['stamina',-3]] },
+        ]},
+
+      flashlight_on:{ id:'flashlight_on',
+        text:'你按下开关。光柱亮起——只亮了半秒，就像被黑暗"喝"掉一样迅速衰减、变红、熄灭。这一层会吞噬外来的光。但就在那半秒的微光里，走廊深处，你瞥见一抹悬在半空、咧到耳根的——笑。它在黑暗里冲你笑。',
+        onEnter:[['flag','saw_smile',true],['sanity',-5]],
+        choices:[
+          { label:'盯着那个笑，想看清它是什么（错误）', goto:'smiler_stare' },
+          { label:'立刻别开脸，贴墙原地静止', goto:'right_wall', effects:[['sanity',-4]] },
+          { label:'换一节电池，再试一次', requires:(s)=>!!s.inv.battery, goto:'flashlight_again', effects:[['take','battery',1]] },
+        ]},
+
+      flashlight_again:{ id:'flashlight_again',
+        text:'新电池，同样的结果——光亮起，被吞掉，熄灭。但这半秒足够你看清：那抹笑还在原地，没有靠近。它不靠光行动，它等你看它。这层的规矩很清楚：光救不了你，看它才会害死你。',
+        onEnter:[['sanity',-3]],
+        choices:[
+          { label:'闭眼，凭记忆摸黑绕开它', goto:'corridor_fork', effects:[['sanity',2]] },
+          { label:'再看一眼，确认它走了没（错误）', goto:'smiler_stare' },
+        ]},
+
+      smiler_stare:{ id:'smiler_stare',
+        text:'你盯住那个笑。它一直咧着，纹丝不动，就等你这一眼。你越看，它越大，越亮，填满你整个视野——Smiler（微笑者）只需要你愿意直视黑暗中的它。它不来找你，是你把自己交了出去。那笑，是你看见的最后一样东西。',
+        choices:[ { label:'……', ending:'smiler_eaten' } ]},
+
+      corridor_fork:{ id:'corridor_fork',
+        text:'走廊在前方分成两支。你听见两种声音：右支深处，有极轻微、一涨一落的"哗——哗——"，像很远的海浪；左支里，有一个人在用平静的声音说话："这边，往这边走，我知道出口。"那声音温暖、可信，甚至有点耳熟。',
+        onEnter:[['sanity',-3]],
+        choices:[
+          { label:'循着海浪声走右支', goto:'wave_stairwell' },
+          { label:'跟着说话声走左支', goto:'lure_voice' },
+          { label:'两边都不信，往回退去找静室', goto:'bottleneck' },
+        ]},
+
+      lure_voice:{ id:'lure_voice',
+        text:'你朝声音走去。它一直在你前方几步，引着你拐弯、再拐弯。"快到了，"它说，"再走几步。"——可你忽然意识到，它在用你弟弟的声音，而你弟弟从没下来过这里。这是 The Mimics（模仿者），它们在绝对黑暗里完美复制人声，把流浪者诱进死路。前方它们已经围了过来。',
+        onEnter:[['sanity',-7],['flag','met_mimics',true]],
+        choices:[
+          { label:'什么都别说，屏息后退，慢慢摸回岔口', goto:'corridor_fork', effects:[['sanity',-4],['stamina',-3]] },
+          { label:'开口质问"你到底是谁"——暴露自己位置（错误）', goto:'mimic_swarm' },
+          { label:'给它们一瓶杏仁水·绿，趁它们分神脱身', requires:(s)=>!!s.inv.almond_green, goto:'corridor_fork', effects:[['take','almond_green',1],['sanity',3]] },
+        ]},
+
+      mimic_swarm:{ id:'mimic_swarm',
+        text:'你一出声，黑暗里立刻响起一模一样的、属于你自己的声音，从四面八方回过来："你到底是谁。你到底是谁。你到底是谁。"它们已经记下了你的嗓子。声音越收越紧，把你裹在正中央。你再也分不清哪句是自己说的。',
+        choices:[ { label:'……', ending:'sanity_zero' } ]},
+
+      wave_stairwell:{ id:'wave_stairwell',
+        text:'海浪声越来越清晰。你的右手摸到墙体断开——一道向下的楼梯井，潮湿、带着咸腥的风，那是通往更深处（Level 7 的海）的下行口。但就在这时，身后混凝土上传来"哒哒哒"急促的脚步，由远及近——Hound。它靠声音锁定猎物。你脚下的台阶，一踩就会发出回响。',
+        onEnter:[['sanity',-5],['flag','near_stairs',true]],
+        choices:[
+          { label:'转身就往楼梯下狂奔（错误）', goto:'hound_chase' },
+          { label:'屏住呼吸，一动不动，等它走', goto:'hound_pass' },
+          { label:'摸黑往反方向退回主走廊', goto:'bottleneck', effects:[['stamina',-5],['sanity',-3]] },
+        ]},
+
+      hound_chase:{ id:'hound_chase',
+        text:'你的脚步在楼梯井里炸成一串回响——对 Hound 来说，那就是一张点亮的地图。它从黑暗里扑下来，比你想象的快得多。在熄灯，制造声音从来不是逃跑，是投降。',
+        choices:[ { label:'……', ending:'collapse' } ]},
+
+      hound_pass:{ id:'hound_pass',
+        text:'你把呼吸压到最低，僵成一块石头。脚步声从你身侧两步外踱过，停顿，嗅探——然后，缓缓远去，消失在另一条走廊。你在黑暗里站了很久，才敢重新动弹。下行的楼梯就在右手边。',
+        onEnter:[['sanity',6]],
+        choices:[
+          { label:'循着海浪与咸风，走下楼梯（→ 更深处）', goto:'LInf:entry', effects:[['stamina',-6],['sanity',4]] },
+          { label:'放弃下行，回去找静室喘口气', goto:'bottleneck' },
+        ]},
+
+      bottleneck:{ id:'bottleneck',
+        text:'你退回到走廊交汇处。这里风从三个方向涌来，各带不同的气味：一道是楼梯井里咸腥的海风，通向更深的黑；正前方是一面在指尖下微微"发麻"的墙——像没渲染完的纹理，那是回上一层（Level 5）的不稳定出口；而最尽头，混凝土走廊本身仿佛没有终点地向前延伸，叫人想一直走下去，走进无限。',
+        variants:{
+          dread:'三股风像三只手按在你身上。你已经记不清自己是从哪扇门进来的了。',
+          broken:'走廊在你眼前不断生长。墙在退后。无论你朝哪边，路都更长了。你属于这里。一直都是。'
+        },
+        choices:[
+          { label:'走进永无止境的延伸走廊（→ 无限层级）', goto:'LInf:entry', effects:[['stamina',-6],['sanity',-4]] },
+          { label:'循咸风走下楼梯井（→ 更深的海）', goto:'wave_stairwell' },
+          { label:'撞穿发麻的墙，回到 Level 5', goto:'L5:entry', effects:[['stamina',-8],['sanity',5]] },
+          { label:'再回主走廊摸索一圈', goto:'corridor_fork' },
+        ]},
+    }
+  };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+
+// ===== data/levels/LExcl.js =====
+(function (g) {
+  const GAME = (g.GAME = g.GAME || {}); GAME.levels = GAME.levels || {};
+  GAME.levels.LExcl = {
+    id:'LExcl', name:'Level ! 不想死就快跑', class:4, danger:'追逐致死·死区·只能进一次', safe:false,
+    entities:['deathmoth','smiler','hound','partygoer','wretch','skinstealer'],
+    nodes:{
+      entry:{ id:'entry',
+        text:'你睁开眼。一间病房，被一层血红的光浸透。中央一张病床，被子叠得整整齐齐，像没人睡过。床头桌上摆着几样东西，墙角是一只药柜。安静。太安静了。\n然后——警报响了。震耳的、不间断的电铃声，从墙里、地里、天花板里同时灌进你的脑子。走廊那头，一排被锁的门开始嘭、嘭、嘭地砸响。它们要出来了。',
+        variants:{
+          dread:'红光在你眼里发黑。警报声里夹着无数指甲刮门的声音。那些门后面有东西在数你——一、二、三——数到几它们就出来？',
+          broken:'红。红。床上躺着的是你自己，叠在被子里，安安静静。警报是你的心跳。门后是你自己在砸门。快跑。可你已经在床上了，怎么跑？快跑。' },
+        onEnter:[['sanity',-6]],
+        choices:[
+          { label:'花五秒翻床头桌和药柜，抓物资就跑', goto:'supply' },
+          { label:'什么都别管，立刻冲向走廊', goto:'corridor1', effects:[['sanity',-2]] },
+        ]},
+
+      supply:{ id:'supply',
+        text:'你扑向床头桌：一瓶杏仁水·灰、一支手电。药柜里翻出一小包火盐。生存指南第一条在脑子里炸开——别贪，多带反而拖慢你。门快被砸穿了。',
+        onEnter:[['give','almond_grey',1],['give','flashlight',1],['give','firesalt',1]],
+        choices:[
+          { label:'够了，抓上就冲进走廊', goto:'corridor1', effects:[['stamina',-3]] },
+          { label:'再多翻一会儿，能拿就拿（贪婪）', goto:'greed_death', effects:[['sanity',-4]] },
+        ]},
+
+      greed_death:{ id:'greed_death',
+        text:'你又拉开一个抽屉、又翻一个柜子。就在你直起腰的瞬间，所有的门同时炸开。走廊里涌出的东西多到看不清形状，它们以一模一样的速度朝病房涌来，把你按回了那张整齐的病床上。',
+        choices:[ { label:'……', ending:'sanity_zero' } ]},
+
+      corridor1:{ id:'corridor1',
+        text:'你冲进走廊。医院式的长廊向两端无限延伸，头顶随意排布的「EXIT」标志发着暗红的光——这是这里唯一的光源，于是有的地段亮得刺眼，有的地段黑得彻底。脚下的地砖在轻轻震动。\n身后，破门而出的实体群追了上来，速度和你几乎一致。只有一个方向：往前。',
+        onEnter:[['sanity',-3],['stamina',-5]],
+        choices:[
+          { label:'闷头狂奔，不回头', goto:'moths', effects:[['stamina',-6]] },
+          { label:'回头看一眼追兵（致命的犹豫）', goto:'hesitate_death', effects:[['sanity',-5]] },
+        ]},
+
+      hesitate_death:{ id:'hesitate_death',
+        text:'你回头了。就那么半秒。脚下一个踉跄，膝盖砸在裂开的地砖上。等你想爬起来，那一致的脚步声已经漫过了你。它们不急——它们从来不急。',
+        choices:[ { label:'……', ending:'collapse' } ]},
+
+      moths:{ id:'moths',
+        text:'前方一段开阔的高顶廊厅。天花板上密密麻麻悬着一团黑——死亡飞蛾（Death Moths），它们成群俯冲下来，扑向你的脸和脖子。你想起来：它们不聪明，会被扔出去的东西引开。',
+        onEnter:[['sanity',-4]],
+        choices:[
+          { label:'抄起杏仁水瓶往侧面用力扔，引开它们', requires:(s)=>!!s.inv.almond_grey, goto:'corridor2', effects:[['take','almond_grey',1],['stamina',-4]] },
+          { label:'打开手电直照蛾群，想把它们烤退（错套规则）', requires:(s)=>!!s.inv.flashlight, goto:'moth_death' },
+          { label:'用胳膊护住头，硬冲过蛾群', goto:'corridor2', effects:[['sanity',-8],['stamina',-10]] },
+        ]},
+
+      moth_death:{ id:'moth_death',
+        text:'光不是用来对付飞蛾的——那是给笑魇的法子。手电的光柱反而像信标，整团黑潮顺着光涌向你的手、你的眼睛。等你扔掉手电时，已经看不见路了。你撞上一面金属门，停了下来。在这里，停下就是结束。',
+        choices:[ { label:'……', ending:'collapse' } ]},
+
+      corridor2:{ id:'corridor2',
+        text:'廊厅尽头是一段彻底漆黑的区段——某盏 EXIT 标志熄了。黑暗里传来低沉的、循着声音逼近的喘息：Hound（猎犬）。生存指南说它聪明，而且喜爱光明，可以射击光源让它迷惑。\n你身后追兵的脚步还在，一致地、不紧不慢地踩着。',
+        onEnter:[['sanity',-5]],
+        choices:[
+          { label:'摸黑贴墙快走，绝不开灯', goto:'safezone', effects:[['stamina',-7],['sanity',-3]] },
+          { label:'用火盐点燃远处的一盏标志，把猎犬引向那点光', requires:(s)=>!!s.inv.firesalt, goto:'safezone', effects:[['take','firesalt',1],['sanity',4]] },
+          { label:'打开手电照清路面再跑（错套规则）', requires:(s)=>!!s.inv.flashlight, goto:'hound_death' },
+        ]},
+
+      hound_death:{ id:'hound_death',
+        text:'你忘了——猎犬喜爱光明。手电一亮，喘息声便毫不犹豫地朝光奔来。它比飞蛾聪明得多，绕过你的护臂，从黑暗里精准地咬住了那束光的源头：你的手，然后是你。',
+        choices:[ { label:'……', ending:'collapse' } ]},
+
+      safezone:{ id:'safezone',
+        text:'前方的红光忽然换了色——一道蓝色的门。推开，是一小段蓝色调、光照充足的安全区（Safe Zone）。警报声在这里被隔成了遥远的嗡鸣，没有任何实体。架子上有杏仁水和能量棒，墙边一张床。只有 6% 的人见过这里。\n生存指南第四条：在安全区慢慢来。别只待十分钟就走。',
+        onEnter:(s)=> s.flags.found_safezone ? [] : [['give','almond_grey',1],['give','almond_blue',1],['flag','found_safezone',true]],
+        choices:[
+          { label:'休整（存档点）', goto:'safezone', noTick:true, effects:[['sanity',8]] },
+          { label:'喝下杏仁水·蓝，压住要崩的神经', requires:(s)=>!!s.inv.almond_blue, goto:'safezone', effects:[['take','almond_blue',1],['sanity',30]], noTick:true },
+          { label:'养足精神，重新踏进红色走廊', goto:'smiler', effects:[['stamina',20],['sanity',6]] },
+        ]},
+
+      smiler:{ id:'smiler',
+        text:'回到血红的走廊。前方一段越来越暗，黑暗里悬浮着两道弯弯的、发亮的白——一张咧到极致的笑。Smiler（微笑者），这层里最大的威胁。它怕火怕光：手电能挡住它出门，火盐能逼退它；可你要是直视它、又拿不出光，它就会贴上来。',
+        onEnter:[['sanity',-7]],
+        choices:[
+          { label:'举起手电，把光柱死死压在那张笑上', requires:(s)=>!!s.inv.flashlight, goto:'fork', effects:[['sanity',3],['stamina',-4]] },
+          { label:'撒一把火盐点燃，用火墙隔开它', requires:(s)=>!!s.inv.firesalt, goto:'fork', effects:[['take','firesalt',1],['sanity',2]] },
+          { label:'什么都没有，那就直愣愣盯着它走过去（错套规则）', goto:'smiler_death' },
+        ]},
+
+      smiler_death:{ id:'smiler_death',
+        text:'没有光，没有火，你却迎着那张笑直直走了过去——这正是它等的。黑暗里那道笑骤然放大，吞掉了所有别的颜色。你最后看清的，是它没有眼睛，只有笑。',
+        choices:[ { label:'……', ending:'smiler_eaten' } ]},
+
+      fork:{ id:'fork',
+        text:'你跑过一个又一个弯道。每一个弯道都制造出「到达出口」的假象。眼前同时出现两扇门：左边那扇 EXIT 标志暗得几乎看不清，门缝里透着死寂的空气；右边那扇下方，渗出一线清亮、稳定的蓝光。\n生存指南：假出口的标志通常较暗，多通向空房间——进去就再也出不来。',
+        onEnter:[['sanity',-4],['stamina',-6]],
+        choices:[
+          { label:'推开标志暗淡的左门', goto:'fake_exit' },
+          { label:'走向渗着稳定蓝光的右门', goto:'bottleneck' },
+          { label:'喝口杏仁水·灰续命再决定', requires:(s)=>!!s.inv.almond_grey, goto:'fork', effects:[['take','almond_grey',1],['thirst',-50],['stamina',30],['sanity',10]], noTick:true },
+        ]},
+
+      fake_exit:{ id:'fake_exit',
+        text:'门在身后合上。这是一个空房间——四壁是不可摧毁的金属，没有第二扇门。标志的暗，本就是警告。墙外，那一致的脚步声慢慢围拢过来，不慌不忙地等你力竭。这里没有出口，从来没有。',
+        choices:[
+          { label:'砸门、嘶吼，直到再也跑不动', ending:'collapse' },
+        ]},
+
+      bottleneck:{ id:'bottleneck',
+        text:'蓝光越来越亮。这一段走廊两侧再没有岔路、没有弯道——生存指南说过：若尽头的门两侧没有别的岔路，那才是真出口。你跑过最后一公里，腿已经不属于你，但那道蓝门近在咫尺。\n突然，头顶一盏 EXIT 标志开始异常闪烁，发出刺耳的嘶嘶声，亮度诡异地飙升——它要爆炸了，会在你和门之间烧起一道火墙。',
+        onEnter:[['sanity',-5],['stamina',-8]],
+        choices:[
+          { label:'赌一把，在标志炸开前抢冲过去', goto:'exit_door', effects:[['stamina',-12],['sanity',-4]] },
+          { label:'用火盐先在脚下引一道反向火，逼自己只剩冲刺一条路', requires:(s)=>!!s.inv.firesalt, goto:'exit_door', effects:[['take','firesalt',1],['stamina',-6],['sanity',3]] },
+          { label:'怕烧，停下来等火势过去（致命的停顿）', goto:'stop_death' },
+        ]},
+
+      stop_death:{ id:'stop_death',
+        text:'你停了。生存指南第二条你忘得一干二净——绝不能停下。火墙烧着烧着，身后那不紧不慢的脚步声却追了上来。它们不怕等。在 Level ! 里，停下从来不是休息，是把命交出去。',
+        choices:[ { label:'……', ending:'collapse' } ]},
+
+      exit_door:{ id:'exit_door',
+        text:'火舌擦着你的后背炸开。你用尽最后一点力气撞上那道蓝门——它开了。门外不是另一条红色走廊，是一片温暖的、安静的虚无，警报声被彻底关在了身后。你逃出来了。约十公里，只能进一次的 Level !，被你跑完了。\n身后的门缓缓合上，再不会为你打开。可你手里，多出了一样原本不该有的东西：一把通往终焉的钥匙。',
+        onEnter:[['sanity',12],['flag','end_key',true]],
+        choices:[
+          { label:'攥紧钥匙，走进那片虚无（→ The End）', goto:'TheEnd:entry', effects:[['sanity',5]] },
+        ]},
+    }
+  };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+
+// ===== data/levels/LFun.js =====
+(function (g) {
+  const GAME = (g.GAME = g.GAME || {}); GAME.levels = GAME.levels || {};
+  GAME.levels.LFun = {
+    id:'LFun', name:'Level Fun 欢乐层级', class:3, danger:'永恒狂欢·篡改', safe:false,
+    entities:['partygoer'],
+    nodes:{
+      entry:{ id:'entry',
+        text:'暖风把你送进一间无限延伸的派对房。气球贴着天花板，长桌上摆满纸杯蛋糕，墙上钉着画得歪歪扭扭的卡通动物。一只挂钟在滴答，背后是放慢了的《生日快乐歌》，黏稠得像糖浆。没有人。蛋糕上的奶油是新鲜的。',
+        variants:{
+          dread:'……气球太多了。每一只都在极缓慢地转向你这边。歌声慢得能听清每个走调的音节。墙上的卡通笑脸，刚才是不是没有这么多张？',
+          broken:'生日快乐——亲爱的——你！蜡烛替你点好了，座位牌上写着你的名字，你迟到了好久好久。坐下吧。坐下吧。它们一直在等你。一直在等你。' },
+        onEnter:[['sanity',-4]],
+        choices:[
+          { label:'贴墙绕行，找异常的门', goto:'corridor' },
+          { label:'走近长桌看那些蛋糕', goto:'table' },
+          { label:'循着歌声往房间深处走', goto:'hall' },
+        ]},
+      table:{ id:'table',
+        text:'纸杯蛋糕上插着小旗。靠近了你才发现：奶油里嵌着指甲，蛋糕胚的截面有发丝的纹理。一张手写卡片摆在最前面，字迹工整：「随便吃 =) 这都是为你准备的」。你的胃在叫，水也快没了。',
+        onEnter:[['sanity',-5]],
+        choices:[
+          { label:'尝一口（它说这是为你准备的）', goto:'feast_death' },
+          { label:'想起警告：不信任何带「=)」的东西，退开', goto:'corridor', effects:[['sanity',3]] },
+          { label:'翻找桌下被遗落的补给', goto:'table_loot' },
+        ]},
+      table_loot:{ id:'table_loot',
+        text:'你蹲到长桌底下。糖纸、断掉的派对帽、一个被踩扁的礼盒。礼盒里有一只还能用的手电，旁边滚着两瓶杏仁水·绿——某个流浪者没来得及带走。',
+        onEnter:[['give','flashlight',1],['give','almond_green',2]],
+        choices:[
+          { label:'抱着东西离开长桌', goto:'corridor', effects:[['sanity',2]] },
+        ]},
+      feast_death:{ id:'feast_death',
+        text:'入口即化。甜，太甜，甜到你尝不出那底下咸腥的东西。第二口时房间忽然亮起来——它们一直坐在你看不见的座位上，齐声拍手。亮黄的皮革手掌，脸上是同一张印死的笑。你已经是派对的一部分了。蜡烛为你而点。',
+        choices:[
+          { label:'……（吹灭蜡烛）', ending:'sanity_zero' },
+        ]},
+      corridor:{ id:'corridor',
+        text:'你贴着墙走。装饰一段比一段陈旧：褪色的彩带、瘪掉的气球、墙上的卡通笑脸被刮花。歌声在这里变远了。前方有三处岔口——一扇画着老虎的双开门，一道半掩的活动板房门缝里透出柔和的烛光，还有一段彩带尽头的安静角落。',
+        onEnter:[['sanity',-2]],
+        choices:[
+          { label:'去彩带尽头的安静角落歇脚', goto:'quiet' },
+          { label:'推开画着老虎的双开门', goto:'door_room' },
+          { label:'凑近那道透出烛光的门缝', goto:'lost_camp' },
+          { label:'喝一口杏仁水·绿', requires:(s)=>!!s.inv.almond_green, goto:'corridor', noTick:true, effects:[['take','almond_green',1],['thirst',-45],['sanity',10],['stamina',20]] },
+        ]},
+      quiet:{ id:'quiet',
+        text:'彩带的尽头是一个被遗忘的小隔间，三面是堆叠的礼盒，挡住了歌声和那些笑脸。空气里没有甜味。你把礼盒摞得更高，背靠墙坐下，第一次能听见自己的呼吸。',
+        choices:[
+          { label:'休整（存档点）', goto:'quiet', noTick:true, effects:[['sanity',8]] },
+          { label:'回到走廊继续找出口', goto:'corridor' },
+          { label:'检查礼盒堆深处', goto:'quiet_loot' },
+        ]},
+      quiet_loot:{ id:'quiet_loot',
+        text:'最里面的礼盒没有包装纸，沉甸甸的。里面是一小袋火盐和一面巴掌大的镜子——M.E.G. 的标准随身包，主人不知去向。',
+        onEnter:[['give','firesalt',1],['give','mirror',1]],
+        choices:[
+          { label:'收好，回到隔间', goto:'quiet', effects:[['sanity',2]] },
+        ]},
+      door_room:{ id:'door_room',
+        text:'门后是又一间派对房，但这次有人——一个亮黄色的高大身影站在桌边，手里攥着一束气球，脸上印着卡通笑脸，缓缓朝你转过来，举起另一只手向你招手，热情得近乎温柔。这是 Partygoer（派对客）。它身后的墙角，有一道没画完的、抖动的门缝。',
+        onEnter:[['sanity',-7]],
+        choices:[
+          { label:'挥手回应，走过去接住它递来的气球', goto:'invite_death' },
+          { label:'站住不动，保持安静，慢慢挪向墙角的门缝', goto:'sneak' },
+          { label:'用镜子照它', requires:(s)=>!!s.inv.mirror, goto:'mirror_check' },
+          { label:'转身退回走廊', goto:'corridor', effects:[['sanity',-3]] },
+        ]},
+      invite_death:{ id:'invite_death',
+        text:'你接住了气球。它的手掌合上来，皮革一样的指头贴上你的脸颊，温度低得反常。「来玩呀。」更多亮色的身影从四面的门里涌出来，拍着手围成一圈。它们有的是要把你转化成同类，有的只想把你做成下一批纸杯蛋糕——对你而言没有区别。圈子收紧了。',
+        choices:[
+          { label:'……', ending:'sanity_zero' },
+        ]},
+      mirror_check:{ id:'mirror_check',
+        text:'你举起镜子。镜面里那张卡通笑脸纹丝不动——但它的身体在镜中是空的，气球的影子也没有。它仍在向你招手，姿态没变，却显然不知道自己已经被看穿。趁这一瞬的停滞，墙角抖动的门缝就在你左手边。',
+        onEnter:[['flag','partygoer_seen',true],['sanity',-2]],
+        choices:[
+          { label:'屏住呼吸，钻进抖动的门缝', goto:'glitch_exit' },
+          { label:'慢慢退回走廊', goto:'corridor', effects:[['sanity',-4]] },
+        ]},
+      sneak:{ id:'sneak',
+        text:'你定住。它的笑脸朝向你，气球在它手里轻轻浮动。你一寸一寸往墙角的门缝挪。它没有追——但更多脚步声正从隔壁的门后聚拢过来，欢笑的嗡鸣一点点变大。门缝就在伸手可及处，再快一点就会惊动它们。',
+        choices:[
+          { label:'冷静地继续挪向门缝（不要跑）', goto:'glitch_exit', effects:[['stamina',-5]] },
+          { label:'撒腿冲向门缝', goto:'invite_death' },
+        ]},
+      hall:{ id:'hall',
+        text:'歌声把你引到一处亮着烛光的长廊。一群披着彩色斗篷的人围坐成圈，平静地哼着调子。他们不是派对客——是 The Lost（迷失者），自愿留在这层的人。一个戴花冠的女人抬起头，温和地朝你笑：「你看起来很累。把你自己交给这里，就再也不用走了。我叫 Meg，加入我们吧。」',
+        onEnter:[['sanity',-3]],
+        choices:[
+          { label:'坐进圈子，听他们说', goto:'lost_camp' },
+          { label:'摇头，退回走廊', goto:'corridor', effects:[['sanity',-2]] },
+        ]},
+      lost_camp:{ id:'lost_camp',
+        text:'烛光里，迷失者们传递着一只空碗。「外面没有出口，」戴花冠的人轻声说，「只有这里。放下名字，放下要去哪里的念头，你就自由了。喝下去，你就属于这里了。」碗递到你面前。圈子里每张脸都松弛、空洞、满足。这很有诱惑——你确实太累了。',
+        onEnter:[['sanity',-4]],
+        choices:[
+          { label:'接过碗，把自己交出去', goto:'cult_surrender' },
+          { label:'咬住舌头，提醒自己还有要去的地方，起身', requires:(s)=>s.sanity>20, goto:'corridor', effects:[['sanity',-5],['stamina',-5]] },
+          { label:'用火盐划一道界，逼退他们的手', requires:(s)=>!!s.inv.firesalt, goto:'corridor', effects:[['take','firesalt',1],['sanity',4]] },
+        ]},
+      cult_surrender:{ id:'cult_surrender',
+        text:'碗里的东西是温的，没有味道。你喝下去的那一刻，「要去哪里」这个念头先消失了，然后是你的名字，然后是你为什么会在这里。哼唱声把你接了进去。圈子又多了一张松弛而满足的脸。你再也不会想要离开。',
+        choices:[
+          { label:'……', ending:'cult_lost' },
+        ]},
+      glitch_exit:{ id:'glitch_exit',
+        text:'门缝里没有甜味，也没有歌声——只有一片刺眼的、压抑的白，像被强光漂洗过的虚无。这是后室里极少有人能找到的隐藏裂缝，通往 Level !（无光之地）。身后派对房的笑声正在逼近，你只有一次机会。',
+        onEnter:[['sanity',-3]],
+        choices:[
+          { label:'纵身钻进白色的裂缝（→ Level !）', goto:'LExcl:entry', effects:[['stamina',-10]] },
+          { label:'害怕了，缩回派对房', goto:'door_room', effects:[['sanity',-6]] },
+        ]},
+    }
+  };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+
+// ===== data/levels/LInf.js =====
+(function (g) {
+  const GAME = (g.GAME = g.GAME || {}); GAME.levels = GAME.levels || {};
+  GAME.levels.LInf = {
+    id:'LInf', name:'Level ∞ 无限层级', class:4, danger:'实体侵染 · 模因循环 · 永无逃脱', safe:false,
+    entities:['facelings','smiler','partygoer','deathmoth'],
+    nodes:{
+      entry:{ id:'entry',
+        text:'你站在一座机场航站楼里。出发牌在头顶轻轻翻页，登机口的座椅排成整齐的行列，免税店的灯还亮着。一切都很正常——直到你读出最近的航班信息牌：目的地一栏，每一行都写着同一个字，「∞」。广播响起一段温吞的提示音，然后是寂静。你回头看来时的廊桥，它已经接上了另一段一模一样的航站楼。',
+        variants:{
+          dread:'航站楼太干净了，干净得不像有人来过。窗外是一片均匀的白，什么都没有。广播又响了——这次，提示音里夹着你母亲的声音，在很远的登机口喊你的名字。你没有母亲在这里。你确定吗？',
+          broken:'你一直在登机。一直在登机。出发牌翻着，翻着，每一行都是∞，每一行都是你。地毯记得你的脚步，比你自己记得清楚。跟随声音，跟随光，接受你唯一的命运。你来过这里几次了？数字也开始撒谎。',
+        },
+        onEnter:[['sanity',-4]],
+        choices:[
+          { label:'沿着登机口的指示牌往前走', goto:'concourse', effects:[['stamina',-4]] },
+          { label:'走进还亮着灯的免税店找补给', goto:'shop' },
+          { label:'走近落地窗，看看外面是什么', goto:'window' },
+        ]},
+
+      concourse:{ id:'concourse',
+        text:'你沿着一长排登机口往前走。A12、A13、A14……号码一直涨，座椅一直延伸，没有尽头。走了很久，你回头，A12 又出现在你前方。你意识到这条廊道在循环——但每绕一圈，总有什么细微地变了：上一圈那盏闪烁的灯，这一圈不闪了；上一圈空着的座椅，这一圈坐着一个背对你的人形。',
+        onEnter:[['sanity',-3]],
+        choices:[
+          { label:'继续往前走，记住每一圈的不同（绕圈）', goto:'loop', effects:[['stamina',-3]] },
+          { label:'退回主厅', goto:'entry' },
+          { label:'走向那个背对你的人形', goto:'faceling' },
+        ]},
+
+      loop:{ id:'loop',
+        text:'你又绕回了 A12。这是第几圈了？你强迫自己数着差异：地毯花纹偏移了一指宽，出发牌上多了一班永不起飞的航班，远处餐厅的冷柜门开了一道缝。循环在漂移。多绕几圈，也许能从漂移里读出规律——也许只会读出疯狂。',
+        variants:{
+          dread:'又是 A12。差异越来越难分辨，或者说，是你越来越分不清。你怀疑自己根本没在动，是航站楼在你脚下偷偷换牌。',
+          broken:'A12。A12。A12。没有第几圈，只有这一圈，永远的这一圈。墙在呼吸，出发牌在数你。你一直都在这儿，不是吗。',
+        },
+        onEnter:[['sanity',-5],['thirst',4]],
+        choices:[
+          { label:'再绕一圈，继续记录漂移', goto:'loop', effects:[['stamina',-3],['thirst',3]] },
+          { label:'拼出规律：找到那扇「会渲染错」的登机口（需绕够圈数）', requires:(s)=>(s.visited['LInf:loop']||0)>=3, goto:'true_gate' },
+          { label:'放弃挣扎，跟随广播里的声音走（需绕够圈数）', requires:(s)=>(s.visited['LInf:loop']||0)>=5, goto:'surrender' },
+          { label:'离开循环，去免税店补给', goto:'shop' },
+        ]},
+
+      shop:{ id:'shop',
+        text:'免税店的货架满满当当：成排的瓶装水、包装精美的食物、手电筒、打火机。你太渴了，伸手就要拿一瓶水——可这里没有杏仁水，连一瓶都没有。所有「水」的标签上，配料表是一行你看不懂的卢恩文。货架上的食物散发着甜腻又陌生的气味。',
+        onEnter:[['sanity',-2]],
+        choices:[
+          { label:'只拿手电筒和打火机，不碰食物饮料', goto:'concourse', effects:[['give','flashlight',1],['give','battery',1]] },
+          { label:'拧开一瓶「水」灌下去（太渴了）', goto:'tainted' },
+          { label:'什么都不拿，退出去', goto:'entry' },
+        ]},
+
+      tainted:{ id:'tainted',
+        text:'水入口是甜的，甜得发腻。三秒后你的喉咙开始烧。这层找不到杏仁水是有原因的——货架上的一切都不能碰。你扶着货架干呕，视线扭曲，卢恩文从标签上爬下来，钻进你的眼睛。',
+        onEnter:[['sanity',-12],['thirst',-10],['stamina',-15]],
+        choices:[
+          { label:'撑着站起来，逃回主厅', goto:'entry', effects:[['sanity',-4]] },
+        ]},
+
+      window:{ id:'window',
+        text:'你走近落地窗。外面是一片纯粹的、没有深度的白，看久了眼睛发酸。现在还是白天。你想起设定里那句警告：到了夜里，窗户会变成紫罗兰色，自己向外打开——而进去的人，再没有列在任何名单上。此刻天色正在暗下去。',
+        choices:[
+          { label:'趁还是白天，立刻离开窗边', goto:'entry', effects:[['sanity',-3]] },
+          { label:'等到夜里，看看打开的窗后面是什么', goto:'violet_window' },
+        ]},
+
+      violet_window:{ id:'violet_window',
+        text:'天黑了。整排窗户同时泛起紫罗兰色的光，无声地向外打开，像一排张开的嘴。冷风涌进来，广播里的声音变得清晰：跟随光，成为我们的一部分。窗外那片白里，开始浮现无数张你认识的脸，朝你伸手。同时，黑暗的航站楼里，每一个登机口都站起了实体。',
+        onEnter:[['sanity',-10]],
+        choices:[
+          { label:'踏进打开的紫窗（未知传送）', goto:'window_drop' },
+          { label:'转身狂奔回内厅深处', goto:'night' },
+        ]},
+
+      window_drop:{ id:'window_drop',
+        text:'你跨过窗框。脚下没有地面，那片白接住了你，又松开了你。坠落没有方向，那些认识的脸贴上来，喊着你的名字，温柔地把你拆开。你在别处醒来——如果那还算醒来。',
+        choices:[
+          { label:'……', goto:'L0:entry' },
+        ]},
+
+      faceling:{ id:'faceling',
+        text:'你绕到那个背对你的人形面前。它穿着体面的旅客衣装，安静地坐着。它缓缓转过头——脸是一整片平滑的空白，没有眼睛、没有嘴。Faceling（无面者）。它们通常温和，但本能地厌恶被直视太久。它歪了歪头，等着你的反应。',
+        onEnter:[['sanity',-5]],
+        choices:[
+          { label:'低头、不与它对视，安静绕开', goto:'concourse', effects:[['sanity',3]] },
+          { label:'盯着它那张空白的脸看个仔细（错误）', goto:'faceling_death' },
+          { label:'用手电直照它的脸（错误）', requires:(s)=>!!s.inv.flashlight, goto:'faceling_death' },
+        ]},
+
+      faceling_death:{ id:'faceling_death',
+        text:'你直视它。空白的脸上，慢慢裂开一道弧线——一个不属于无面者的、过宽的笑。它不再是 Faceling 了。Smiler（微笑者）从被你激怒的它身体里浮上来，整座航站楼的灯应声熄灭。你套错了规则：在这里，直视，是邀请。',
+        choices:[
+          { label:'……', ending:'smiler_eaten' },
+        ]},
+
+      night:{ id:'night',
+        text:'你逃进内厅深处，背靠一根水泥柱。夜晚的航站楼里满是脚步声——后室几乎所有实体都在夜循环中苏醒。远处传来派对的鼓点和扭曲的笑声（Partygoer），头顶掠过死亡飞蛾（Deathmoth）拍翅的闷响。你需要熬到天亮，或者找到真正的出口。',
+        variants:{
+          broken:'脚步，笑声，拍翅。你分不清哪些是实体，哪些是你自己。也许你也是它们中的一个了。也许你一直都是。',
+        },
+        onEnter:[['sanity',-8]],
+        choices:[
+          { label:'屏息蜷在柱后，熬到天亮', goto:'concourse', effects:[['sanity',-6],['stamina',-8],['thirst',6]] },
+          { label:'循着没有实体的方向，去找登机口', goto:'loop' },
+        ]},
+
+      true_gate:{ id:'true_gate',
+        text:'绕了一圈又一圈，你终于把漂移拼成了规律：每一圈，有一个登机口的号码会比应有的少一位——那不是循环的一部分，那是循环的「缝」。你找到它：一个号码在轻微抖动、像没渲染完的登机口。牌子上写着 GATE ∞，廊桥尽头不是飞机，是一片温暖的、不刺眼的光。这不是「登机逃生」的陷阱航班，这是循环本身的裂缝。',
+        onEnter:[['sanity',5]],
+        choices:[
+          { label:'走进 GATE ∞，跟随那片光（→ The End）', goto:'TheEnd:entry', effects:[['sanity',6]] },
+          { label:'不信任它，退回去再绕一圈确认', goto:'loop', effects:[['sanity',-4]] },
+          { label:'登上停在缝里的那架飞机（看着像真航班）', goto:'boarding' },
+        ]},
+
+      boarding:{ id:'boarding',
+        text:'你没走那片光，而是踏上廊桥尽头的飞机。舱门内，一个被白光彻底抹去的人形迎上来，向你索要护照。你想起规则：必须如实回答它的每一个问题，登机后绝不与任何人形对视，落地时务必最后一个下机。它开口问你：「你为什么想离开？」',
+        onEnter:[['sanity',-3]],
+        choices:[
+          { label:'如实回答，全程低头不与人形对视', requires:(s)=>s.sanity>=15, goto:'flight_ok' },
+          { label:'撒个谎，敷衍它（错误）', goto:'flight_bad' },
+          { label:'落座后忍不住抬头看了别的乘客一眼（错误）', goto:'flight_bad' },
+        ]},
+
+      flight_ok:{ id:'flight_ok',
+        text:'你诚实作答，全程垂着眼。航班无声起飞，飞了不知多久。落地时，你按规则等到最后一个走下舷梯。舱门外不是机场，是一条熟悉的、下着雨的街道——前室。你做对了每一步。墙后的嗡鸣，从此只在梦里。',
+        choices:[
+          { label:'走下舷梯，回家', ending:'escape' },
+        ]},
+
+      flight_bad:{ id:'flight_bad',
+        text:'你违反了规则——也许是撒了谎，也许是对视了。人形没有发怒，只是安静地记下了。飞机落地，舱门打开，外面是又一座一模一样的航站楼，出发牌上每一行还是∞。你被原样送了回来，记忆却少了一块。又一次推开同一扇门，第几次了？',
+        onEnter:[['sanity',-10]],
+        choices:[
+          { label:'数不清第几次地，再走回那条循环廊道', requires:(s)=>(s.visited['LInf:loop']||0)<8, goto:'loop' },
+          { label:'彻底分不清自己绕了多少圈（迷失过深）', requires:(s)=>(s.visited['LInf:loop']||0)>=8, ending:'red_loop' },
+        ]},
+
+      surrender:{ id:'surrender',
+        text:'你停下了数圈。广播里的声音从未如此清晰、如此温柔：没有真正的终结，没有逃脱，只有无尽。无限才是这个现实的真实形态。跟随声音，跟随光，接受你唯一的命运，成为我们的一部分。你松开了所有抵抗。第几次了？数字也开始撒谎，然后连撒谎都停了。',
+        choices:[
+          { label:'接受，成为循环的一部分', ending:'red_loop' },
+          { label:'最后一次咬牙挣脱，回到廊道', goto:'loop', effects:[['sanity',-8]] },
+        ]},
+    }
+  };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+
+// ===== data/levels/TheEnd.js =====
+(function (g) {
+  const GAME = (g.GAME = g.GAME || {}); GAME.levels = GAME.levels || {};
+  GAME.levels.TheEnd = {
+    id:'TheEnd', name:'The End 终焉', class:0, danger:'阈限 / 心灵陷阱 / 唯我论', safe:false,
+    entities:['partygoer','smiler'],
+    nodes:{
+      entry:{ id:'entry',
+        text:'门框在你身后消失了——连同那道你穿过来的扭曲。你站在一座图书馆里。书架一排排延伸到看不见的地方，大多空着。荧光灯偶尔闪一下。最先压上来的不是恐惧，是寂静：安静得能听见自己耳膜里的血流。墙上钉着零散的金属字，远处的那串拼出「the end is near」。',
+        variants:{
+          calm:'你站在一座几乎无尽的空图书馆里。空气陈旧，灯光偶尔闪烁，寂静得近乎完美。墙上的金属字拼着「the end is near」。',
+          dread:'寂静里夹着别的东西。书架的尽头像在呼吸地缓缓挪移，那串金属字——你确定刚才不是这么排的。「the end is near」。near。near。它在靠近什么？',
+          broken:'你到家了。是的，这就是家。书的味道，安静，没有黄色，没有嗡鸣。你可以放下了。你终于可以放下了。……门？什么门？这里从来就没有门。你一直都在这座图书馆里读书，不是吗。'
+        },
+        onEnter:[['sanity',-2]],
+        choices:[
+          { label:'摸出口袋里那把刻着「Level !」的钥匙，去找它对应的门', requires:(s)=>!!s.flags.end_key, goto:'true_door' },
+          { label:'在书架间走下去，看看这里到底是什么', goto:'stacks' },
+          { label:'坐到最近的阅览台前，先缓一缓', goto:'alcove' },
+        ]},
+
+      true_door:{ id:'true_door',
+        text:'钥匙在掌心发烫。你沿着书架走，金属字的「near」在余光里一个个熄灭。转过最后一排，一扇普通到突兀的木门嵌在墙上——门把上有个细小的锁孔，形状恰好是「Level !」那把钥匙的齿。这是它存在的意义。',
+        variants:{
+          dread:'门就在那儿。可你的手不想动。门后会不会也只是另一座图书馆？另一场「假现实」？只有一个办法知道。',
+        },
+        choices:[
+          { label:'插入钥匙，转动，推门', requires:(s)=>!!s.flags.end_key, effects:[['flag','used_end_key',true]], ending:'escape' },
+          { label:'……再想想，先别开（回到书架）', goto:'stacks' },
+        ]},
+
+      stacks:{ id:'stacks',
+        text:'你在书架的迷宫里走。书几乎都不在；偶尔抽出一本，里面全是空白，或者反复印着「The End」三个字。几何在背后悄悄变形——你回头，来路已经不是来路了。一张长桌上摆着几台老式电脑，崭新得不像属于这里。',
+        onEnter:[['sanity',-4],['stamina',-4]],
+        choices:[
+          { label:'去试试那些电脑', goto:'terminal' },
+          { label:'继续往里走，追那串金属字', goto:'letters' },
+          { label:'退回阅览台歇会儿', goto:'alcove' },
+          { label:'喝一口杏仁水·蓝，压一压翻涌的念头', requires:(s)=>!!s.inv.almond_blue, goto:'stacks', effects:[['take','almond_blue',1],['sanity',30]], noTick:true },
+        ]},
+
+      terminal:{ id:'terminal',
+        text:'你按下电源。机器发出轻微的嗡鸣——在这种寂静里，像一声尖叫。屏幕亮起，白字打出本层的名字：THE END。几秒后，画面塌成渐隐的雪花噪点。你再按，它不再亮了。但有一台还醒着，屏幕上滚动着一行字：「想回家吗？跟着声音走。」',
+        onEnter:[['sanity',-3]],
+        choices:[
+          { label:'循着那台电脑指的方向走', goto:'fake_reality' },
+          { label:'不理它，回书架', goto:'stacks' },
+          { label:'拔掉电源，让它彻底安静', goto:'silence', effects:[['sanity',4]] },
+        ]},
+
+      fake_reality:{ id:'fake_reality',
+        text:'转过一排书架，光变暖了。前方是一间亮着灯的客厅：电视在放老节目，茶几上有热气腾腾的饭，几个人在沙发上说笑，回头朝你招手——「回来啦，等你好久了。」每一个细节都对。太对了。这是「假现实」，是这层用来留住你的诱饵。屋角的彩带和纸帽在轻轻晃动。',
+        variants:{
+          dread:'他们的脸你都认识。可你越看，越想不起自己叫什么——好像只要走进去坐下，就再也不必想起了。',
+          broken:'家。这就是家。坐下吧。吃口饭吧。外面没有后室，从来没有过。坐下吧。',
+        },
+        onEnter:[['sanity',-6]],
+        choices:[
+          { label:'走进去，坐下，享受这一切', goto:'partygoer_trap' },
+          { label:'盯着彩带和纸帽——派对客（Partygoer）。绝不加入。转身就走', goto:'silence', effects:[['sanity',-4]] },
+          { label:'用镜子照向那几张「熟悉的脸」', requires:(s)=>!!s.inv.mirror, goto:'reveal_fake', effects:[['flag','mirror_used',true]] },
+        ]},
+
+      reveal_fake:{ id:'reveal_fake',
+        text:'镜子里，客厅是空的——没有电视，没有饭，没有人。只有彩带垂在黑暗里，和几具背对着你、一动不动站着的派对客（Partygoer）。它们「永恒狂欢」的规则你记得：绝不加入，绝不进食其食物。你慢慢退出这片暖光。',
+        onEnter:[['sanity',-5]],
+        choices:[
+          { label:'退回寂静的书架深处', goto:'silence', effects:[['sanity',6]] },
+        ]},
+
+      partygoer_trap:{ id:'partygoer_trap',
+        text:'你坐进沙发，有人把一盘食物推到你面前。「吃啊。」你拿起来——食物入口的瞬间，墙、电视、人脸全部融化成黑色的彩带。派对客（Partygoer）的笑容凑近。你想站起来，却分不清哪边是门、哪句低语是自己的念头。外面？外面是什么。从来就没有外面。',
+        choices:[
+          { label:'……（沉入「家」里）', ending:'sanity_zero' },
+        ]},
+
+      letters:{ id:'letters',
+        text:'你顺着墙上的金属字走。「the end is near」反复出现，每一次都离得更近，字也更大。终于，一整面墙被字铺满，挤成一片无意义的金属噪声。墙根的暗处，有什么东西。一道弧线在黑里亮起来——一张悬空的、发光的笑脸。Smiler（微笑者）。',
+        onEnter:[['sanity',-7]],
+        choices:[
+          { label:'按规则：不可直视，垂下眼睛慢慢退开', goto:'silence', effects:[['sanity',2]] },
+          { label:'点燃火盐，逼它退后，再退走', requires:(s)=>!!s.inv.firesalt, goto:'silence', effects:[['take','firesalt',1],['flag','firesalt_ready',true],['sanity',-3]] },
+          { label:'直视那道笑，想看清它到底是什么（错误）', goto:'smiler_death' },
+        ]},
+
+      smiler_death:{ id:'smiler_death',
+        text:'你迎上那道弧线。寂静里，笑容无声地拉宽、拉近，填满你的整个视野——0 分贝里，最后连你自己的心跳都听不见了。',
+        choices:[
+          { label:'……', ending:'smiler_eaten' },
+        ]},
+
+      silence:{ id:'silence',
+        text:'你走进图书馆最深、最静的区域。声压低到近乎 -6 分贝，安静得像把人按进棉花。寂静本身开始制造幻觉：耳边有翻书声，有人轻声念你的名字，可身边一个人都没有。但这里也最适合分辨「真」与「假」——头脑反而清醒了一点。墙基有一道轻微抖动的纹理，像没渲染完。',
+        variants:{
+          dread:'念你名字的声音越来越多，从四面八方涌来。它们在劝你坐下，劝你留下，劝你别再找那扇门了。',
+        },
+        onEnter:[['sanity',-3]],
+        choices:[
+          { label:'回阅览台，整理一下自己', goto:'alcove' },
+          { label:'回书架，继续找出口', goto:'stacks' },
+          { label:'抓住扭曲的窗口，从抖动的墙撞穿出去', goto:'distortion' },
+        ]},
+
+      alcove:{ id:'alcove',
+        text:'你回到一处三面书架围合的阅览台，把椅子搬来抵住缺口。这里灯还算稳，寂静也不那么咄咄逼人。你坐下，让翻涌的念头慢慢沉底。只要还记得自己为什么要找那扇门，你就还没真的留在这儿。',
+        choices:[
+          { label:'休整（存档点）', goto:'alcove', noTick:true, effects:[['sanity',8]] },
+          { label:'抄起桌上半瓶没喝完的杏仁水·灰', requires:(s)=>!s.flags.took_alcove_water, goto:'alcove', effects:[['give','almond_grey',1],['flag','took_alcove_water',true]], noTick:true },
+          { label:'起身，回到书架间', goto:'stacks' },
+          { label:'去最深的寂静区找扭曲出口', goto:'silence' },
+        ]},
+
+      distortion:{ id:'distortion',
+        text:'墙的纹理抖得越来越厉害——「扭曲（Distortion）」正在发生，这是这座图书馆少数能离开的窗口。你后退几步，对准那片没渲染完的墙，能量在指尖嗡嗡发麻。撞过去，下一刻你就会落进它呈现的某个场景。',
+        variants:{
+          dread:'但你心里清楚：从这里出去，只是回到后室的某一层。真正的尽头、真正的门，需要那把你（也许）没有的钥匙。',
+        },
+        choices:[
+          { label:'对着钥匙的方向再确认一次——你带着「Level !」的钥匙吗？', requires:(s)=>!!s.flags.end_key, goto:'entry' },
+          { label:'没有钥匙……那就承认吧：这里就是尽头。停下来，不再找了', requires:(s)=>!s.flags.end_key, ending:'reach_end' },
+          { label:'退回去，先不撞', goto:'silence' },
+        ]},
+    }
+  };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+
+// ===== data/boot.js =====
+(function (g) {
+  const GAME = (g.GAME = g.GAME || {});
+  GAME.DROP_POOL = ['L0:corridors','L1:entry','L2:entry','L6:entry'].filter(t=>{
+    const i=t.indexOf(':'); const lv=GAME.levels[t.slice(0,i)]; return lv && lv.nodes[t.slice(i+1)];
+  });
+})(typeof window !== 'undefined' ? window : globalThis);
+
+
+// ===== ui.js =====
+(function (g) {
+  if (typeof document === 'undefined') return;
+  const GAME = g.GAME;
+  const $ = (id) => document.getElementById(id);
+  const SAVE_KEY = 'backrooms_save_v1';
+  const SET_KEY = 'backrooms_settings_v1';
+  let state = null;
+
+  // ---------- 设置 ----------
+  const DEF = { flicker:true, scan:true, grain:true, bigfont:false, hum:false };
+  let settings = loadSettings();
+  function loadSettings(){ try { return Object.assign({}, DEF, JSON.parse(localStorage.getItem(SET_KEY)||'{}')); } catch(e){ return Object.assign({}, DEF); } }
+  function saveSettings(){ try { localStorage.setItem(SET_KEY, JSON.stringify(settings)); } catch(e){} }
+  function applyBodyClasses(){
+    const tier = (state && !state.ended) ? GAME.sanityTier(state.sanity) : 'calm';
+    const c = ['tier-'+tier];
+    if (!settings.flicker) c.push('noflicker');
+    if (!settings.scan) c.push('noscan');
+    if (!settings.grain) c.push('nograin');
+    if (settings.bigfont) c.push('bigfont');
+    document.body.className = c.join(' ');
+  }
+
+  // ---------- 荧光嗡鸣（WebAudio，离线合成） ----------
+  let actx=null, hum=null;
+  function ensureHum(){
+    if (hum) return;
+    try {
+      actx = actx || new (window.AudioContext||window.webkitAudioContext)();
+      const o=actx.createOscillator();  o.type='sine'; o.frequency.value=60;
+      const o2=actx.createOscillator(); o2.type='sine'; o2.frequency.value=119;
+      const lfo=actx.createOscillator(); lfo.type='sine'; lfo.frequency.value=0.18;
+      const lg=actx.createGain(); lg.gain.value=7; lfo.connect(lg); lg.connect(o2.frequency);
+      const g2=actx.createGain(); g2.gain.value=0;
+      o.connect(g2); o2.connect(g2); g2.connect(actx.destination);
+      o.start(); o2.start(); lfo.start();
+      hum={ g:g2 }; updateHum();
+    } catch(e){ hum=null; }
+  }
+  function killHum(){ if(!hum) return; try{ hum.g.gain.value=0; }catch(e){} hum=null; }
+  function updateHum(){
+    if(!hum||!actx) return;
+    const tier=(state&&!state.ended)?GAME.sanityTier(state.sanity):'calm';
+    const v={calm:0.012,unease:0.02,dread:0.034,broken:0.05}[tier]||0.012;
+    try{ hum.g.gain.setTargetAtTime(v, actx.currentTime, 0.6); }catch(e){ hum.g.gain.value=v; }
+  }
+  function setHum(on){ settings.hum=on; saveSettings(); if(on){ ensureHum(); updateHum(); } else killHum(); }
+
+  // ---------- 设置面板 ----------
+  function buildPanel(){
+    const p=$('panel'); p.innerHTML='';
+    p.appendChild(el('h4',null,'终端设置'));
+    [['flicker','屏幕闪烁'],['scan','扫描线'],['grain','噪点'],['bigfont','大字号'],['hum','荧光嗡鸣 (声音)']].forEach(([k,label])=>{
+      const lab=document.createElement('label');
+      const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=!!settings[k];
+      cb.onchange=()=>{ if(k==='hum'){ setHum(cb.checked); } else { settings[k]=cb.checked; saveSettings(); applyBodyClasses(); } };
+      lab.appendChild(cb); lab.appendChild(document.createTextNode(label)); p.appendChild(lab);
+    });
+  }
+  $('gear').onclick=()=>{ const p=$('panel'); p.hidden=!p.hidden; if(!p.hidden) buildPanel(); };
+
+  // ---------- 渲染辅助 ----------
+  function el(tag,cls,txt){ const e=document.createElement(tag); if(cls)e.className=cls; if(txt!=null)e.textContent=txt; return e; }
+  function sep(){ return el('span','sep','·'); }
+  function mkBtn(t,fn){ const b=document.createElement('button'); b.textContent=t; b.onclick=fn; return b; }
+  function thirstLabel(t){ return t<30?'尚可':t<60?'口渴':t<90?'干渴':'濒临脱水'; }
+  function sanityHint(s){ return {calm:'',unease:'耳边有嗡鸣',dread:'有人在喊你的名字',broken:'你分不清真假了'}[GAME.sanityTier(s)]; }
+  function setTextPlain(str){ const t=$('text'); t.className=''; t.textContent=str; void t.offsetWidth; t.className='reveal'; }
+  function setTextHtml(html){ const t=$('text'); t.className=''; t.innerHTML=html; void t.offsetWidth; t.className='reveal'; }
+  function esc(s){ const d=document.createElement('div'); d.textContent=s==null?'':s; return d.innerHTML; }
+  function addChoice(box,i,label,fn){
+    const b=el('button','choice');
+    b.appendChild(el('span','key', (i+1)<=9 ? String(i+1) : '·'));
+    b.appendChild(el('span','lbl', label));
+    b.style.animationDelay=(i*0.05)+'s'; b.onclick=fn; box.appendChild(b); return b;
+  }
+
+  // ---------- 主渲染 ----------
+  function startMenu(){
+    state=null; applyBodyClasses(); updateHum();
+    $('status').innerHTML='';
+    setTextHtml('<div class="title">后室 · 无尽回廊</div><div class="subtitle">THE ENDLESS HALLS</div><div class="lede">你在错误的地方滑出了现实。选择你坠入的方式：</div>');
+    const box=$('choices'); box.innerHTML='';
+    const starts=Object.values(GAME.starts);
+    starts.forEach((st,i)=> addChoice(box,i, st.label+'　—　'+st.intro, ()=>{ state=GAME.newState(st.id,(Date.now()>>>0)); render(); }));
+    if (localStorage.getItem(SAVE_KEY)) addChoice(box, starts.length, '继续：读取存档', load);
+    $('bar').innerHTML=''; bindKeys();
+  }
+
+  function render(){
+    if(!state){ startMenu(); return; }
+    applyBodyClasses(); updateHum();
+    if(state.ended){ renderEnding(); return; }
+    const lvl=GAME.levels[state.level];
+    const cups=Object.keys(state.inv).filter(k=>k.indexOf('almond_')===0).reduce((n,k)=>n+state.inv[k],0);
+    $('status').innerHTML='';
+    $('status').append(el('span','plate', lvl?lvl.name:state.level), sep(), el('span',null,'口渴：'+thirstLabel(state.thirst)), sep(), el('span',null,'杏仁水×'+cups));
+    const h=sanityHint(state.sanity); if(h) $('status').append(el('span','hint', h));
+    setTextPlain(GAME.nodeText(state));
+    const box=$('choices'); box.innerHTML='';
+    GAME.visibleChoices(state).forEach((c,i)=> addChoice(box,i,c.label, ()=>{ GAME.choose(state,i); autosave(); render(); }));
+    renderBar(); bindKeys();
+  }
+
+  function renderEnding(){
+    const e=GAME.endings[state.ended]||{title:state.ended,text:''};
+    $('status').innerHTML='';
+    setTextHtml('<div class="ending"><span class="tag">结局</span><div class="etitle">'+esc(e.title)+'</div><div class="etext">'+esc(e.text)+'</div></div>');
+    const box=$('choices'); box.innerHTML=''; addChoice(box,0,'重新开始', ()=>{ state=null; render(); });
+    $('bar').innerHTML=''; try{ localStorage.removeItem(SAVE_KEY); }catch(e){} bindKeys();
+  }
+
+  function renderBar(){
+    const inv=Object.entries(state.inv).map(([k,n])=>(GAME.items[k]||{name:k}).name+'×'+n).join('  ')||'（空）';
+    $('bar').innerHTML='';
+    $('bar').append(mkBtn('存档',save_), mkBtn('导出',exportSave), mkBtn('导入',importSave));
+    const span=el('span','inv'); span.innerHTML='背包：<b>'+esc(inv)+'</b>'; $('bar').appendChild(span);
+  }
+
+  // ---------- 键盘导航 ----------
+  let keyHandler=null;
+  function bindKeys(){
+    if(keyHandler) document.removeEventListener('keydown', keyHandler);
+    keyHandler=(e)=>{
+      if(e.target && /input|textarea/i.test(e.target.tagName)) return;
+      const btns=Array.prototype.slice.call($('choices').querySelectorAll('.choice'));
+      if(e.key>='1'&&e.key<='9'){ const idx=+e.key-1; if(btns[idx]){ e.preventDefault(); btns[idx].click(); } }
+      else if((e.key==='Enter'||e.key===' ')&&btns.length===1){ e.preventDefault(); btns[0].click(); }
+    };
+    document.addEventListener('keydown', keyHandler);
+  }
+
+  // ---------- 存档 ----------
+  function autosave(){ if(state && !state.ended){ try{ localStorage.setItem(SAVE_KEY, GAME.serialize(state)); }catch(e){} } }
+  function save_(){ try{ localStorage.setItem(SAVE_KEY, GAME.serialize(state)); flash('已存档'); }catch(e){ flash('存档失败'); } }
+  function load(){ const s=localStorage.getItem(SAVE_KEY); if(s){ try{ state=GAME.deserialize(s); render(); }catch(e){ alert('存档损坏'); } } }
+  function exportSave(){ window.prompt('复制此存档串：', GAME.serialize(state)); }
+  function importSave(){ const s=window.prompt('粘贴存档串：'); if(s){ try{ state=GAME.deserialize(s.trim()); render(); }catch(e){ alert('存档无效'); } } }
+  function flash(m){ const st=$('status'); const old=st.firstChild; const tag=el('span','hint',m); st.appendChild(tag); setTimeout(()=>{ if(state&&!state.ended) render(); }, 900); }
+
+  // 首次任意点击：若开启嗡鸣则激活音频（绕过自动播放限制）
+  function gestureInit(){ if(settings.hum) ensureHum(); document.removeEventListener('click', gestureInit); }
+  document.addEventListener('click', gestureInit);
+
+  g.addEventListener('DOMContentLoaded', ()=>{ applyBodyClasses(); render(); });
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>
+</body></html>

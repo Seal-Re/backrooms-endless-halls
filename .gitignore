@@ -1,0 +1,11 @@
+# 浏览器抓取/测试缓存
+.playwright-mcp/
+# 临时截图
+/*.png
+游戏/*.png
+游戏/.playwright-mcp/
+# 依赖/日志/系统
+node_modules/
+*.log
+.DS_Store
+Thumbs.db
